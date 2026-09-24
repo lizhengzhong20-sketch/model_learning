@@ -280,10 +280,10 @@ const nodeEls=nodes.map(n=>{
   const body=mk('circle',{class:'body', r:n.r, stroke:n.color},g);
   if(n.kind==='ch'){
     mk('text',{class:'l1','text-anchor':'middle',y:-n.r+22},g).textContent=n.ref.emoji;
-    mk('text',{class:'l2','text-anchor':'middle',y:2},g).textContent=n.ref.title.length>9?n.ref.title.slice(0,9)+'…':n.ref.title;
+    mk('text',{class:'l2','text-anchor':'middle',y:2},g).textContent=n.ref.title.length>10?n.ref.title.slice(0,10)+'…':n.ref.title;
     mk('text',{class:'l3','text-anchor':'middle',y:19},g).textContent=`第${n.no}章${n.ref.ability?' · '+n.ref.ability:''}${n.ref.hub?' · ★枢纽':''}`;
   } else {
-    mk('text',{class:'l2','text-anchor':'middle',y:-2},g).textContent=n.ref.t.length>7?n.ref.t.slice(0,7)+'…':n.ref.t;
+    mk('text',{class:'l2','text-anchor':'middle',y:-2},g).textContent=n.ref.t.length>15?n.ref.t.slice(0,15)+'…':n.ref.t;
     mk('text',{class:'l3','text-anchor':'middle',y:12},g).textContent='概念';
   }
   const pulse=mk('circle',{class:'pulse', r:16},g);
@@ -377,7 +377,7 @@ document.getElementById('zout').onclick=()=>zoomAt(box.clientWidth/2,box.clientH
 document.getElementById('zfit').onclick=()=>{
   let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
   nodes.forEach(n=>{ x0=Math.min(x0,n.x-n.r); y0=Math.min(y0,n.y-n.r); x1=Math.max(x1,n.x+n.r); y1=Math.max(y1,n.y+n.r); });
-  vk=Math.min(box.clientWidth/(x1-x0+120), box.clientHeight/(y1-y0+120), 1.6);
+  vk=Math.min(box.clientWidth/(x1-x0+200), box.clientHeight/(y1-y0+200), 1.6);
   vtx=box.clientWidth/2-(x0+x1)/2*vk; vty=box.clientHeight/2-(y0+y1)/2*vk; applyView();
 };
 document.getElementById('phys').onclick=e=>{ physicsOn=!physicsOn; e.target.textContent=physicsOn?'⏸ 物理':'▶ 物理'; };
