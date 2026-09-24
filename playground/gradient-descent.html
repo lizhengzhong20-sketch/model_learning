@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🔥 梯度下降炼丹炉</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0d1117; color: #e6edf3; font-family: "Microsoft YaHei", "PingFang SC", sans-serif; padding: 20px; }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  .sub { color: #8b949e; font-size: 13px; margin-bottom: 16px; }
+  .layout { display: flex; gap: 16px; flex-wrap: wrap; }
+  .main { flex: 1 1 640px; }
+  .side { flex: 1 1 380px; }
+  canvas { background: #161b22; border: 1px solid #30363d; border-radius: 10px; display: block; width: 100%; }
+  .panel { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+  .row { display: flex; align-items: center; gap: 10px; margin: 8px 0; flex-wrap: wrap; }
+  label { font-size: 13px; color: #8b949e; min-width: 72px; }
+  .val { color: #58a6ff; font-family: Consolas, monospace; min-width: 64px; }
+  input[type=range] { flex: 1; min-width: 120px; accent-color: #58a6ff; }
+  select, button {
+    background: #21262d; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px;
+    padding: 6px 14px; font-size: 13px; cursor: pointer;
+  }
+  button:hover { border-color: #58a6ff; }
+  .stats { font-family: Consolas, monospace; font-size: 13px; color: #8b949e; line-height: 1.9; }
+  .stats b { color: #e6edf3; }
+  .alert { color: #f85149; font-size: 14px; min-height: 20px; margin-top: 6px; }
+  .note { color: #8b949e; font-size: 12px; margin-top: 14px; line-height: 1.8; }
+  .note a { color: #58a6ff; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🔥 梯度下降炼丹炉</h1>
+  <div class="sub">损失曲面越亮越高。调好"丹方"（优化器 × 学习率 × 动量），让小球滚进最深的谷底。</div>
+
+  <div class="layout">
+    <div class="main">
+      <canvas id="terrain" width="760" height="500"></canvas>
+      <div class="panel" style="margin-top:12px;">
+        <div class="row">
+          <label>优化器</label>
+          <select id="opt">
+            <option value="sgd">SGD（盲人下山）</option>
+            <option value="momentum" selected>Momentum（带惯性小球）</option>
+            <option value="adam">Adam（自适应步长）</option>
+          </select>
+          <button id="btnRun">▶ 开始</button>
+          <button id="btnReset">↺ 回到起点</button>
+          <button id="btnRandom">🎲 随机起点</button>
+        </div>
+        <div class="row">
+          <label>学习率</label>
+          <input type="range" id="lr" min="0.001" max="1.2" step="0.001" value="0.05">
+          <span class="val" id="lrVal">0.050</span>
+        </div>
+        <div class="row">
+          <label>动量 β</label>
+          <input type="range" id="beta" min="0" max="0.99" step="0.01" value="0.90">
+          <span class="val" id="betaVal">0.90</span>
+        </div>
+        <div class="row">
+          <label>每帧步数</label>
+          <input type="range" id="speed" min="1" max="10" step="1" value="2">
+          <span class="val" id="speedVal">2</span>
+        </div>
+        <div class="alert" id="alert"></div>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="panel">
+        <div class="stats">
+          步数 <b id="stStep">0</b> ｜ 状态 <b id="stState">待命</b><br>
+          位置 x = <b id="stX">—</b>, y = <b id="stY">—</b><br>
+          当前损失 loss = <b id="stLoss">—</b><br>
+          距谷底距离 = <b id="stDist">—</b>
+        </div>
+      </div>
+      <div class="panel">
+        <div style="font-size:13px;color:#8b949e;margin-bottom:8px;">📉 损失曲线（对数刻度，越低越好）</div>
+        <canvas id="chart" width="360" height="200"></canvas>
+      </div>
+      <div class="panel note" style="color:#8b949e;">
+        💡 试试这些"炼丹"实验：<br>
+        1）SGD + 学习率 0.02：慢慢挪；<br>
+        2）Momentum β=0.9：借助惯性冲过小坑；<br>
+        3）学习率调到 1.0+：💥 飞出山谷（发散）；<br>
+        4）Adam 0.3：大步也能稳住，体会"自适应"。<br>
+        <br>📖 回到知识库：第 2 章《微积分与梯度》· 第 4 章《训练一个模型的完整流程》
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============ 损失函数定义 ============
+// 一个"狭长山谷 + 轻微波纹"的损失曲面：
+// f(x,y) = 0.5x² + 3.2y² + 0.35·sin(2.2x)·sin(2.2y)
+// 狭长（x 方向平缓、y 方向陡）是经典的"病态曲率"，最适合观察动量的作用
+const f  = (x, y) => 0.5*x*x + 3.2*y*y + 0.35*Math.sin(2.2*x)*Math.sin(2.2*y);
+const gx = (x, y) => x + 0.77*Math.cos(2.2*x)*Math.sin(2.2*y);   // ∂f/∂x
+const gy = (x, y) => 6.4*y + 0.77*Math.sin(2.2*x)*Math.cos(2.2*y); // ∂f/∂y
+
+// 世界坐标范围（canvas 像素 ↔ 数学坐标）
+const XMIN=-4.2, XMAX=4.2, YMIN=-2.6, YMAX=2.6;
+
+// ============ 画布与地形预热 ============
+const tc = document.getElementById('terrain'), tctx = tc.getContext('2d');
+const cc = document.getElementById('chart'),   cctx = cc.getContext('2d');
+
+function toPx(x, y) { // 数学坐标 → 像素
+  return [ (x - XMIN) / (XMAX - XMIN) * tc.width,
+           (YMAX - y) / (YMAX - YMIN) * tc.height ];
+}
+function toWorld(px, py) { // 像素 → 数学坐标
+  return [ XMIN + px / tc.width * (XMAX - XMIN),
+           YMAX - py / tc.height * (YMAX - YMIN) ];
+}
+
+// 预渲染地形：先算最大损失，再按 4px 块上色（暗蓝=低，亮黄=高）
+let maxLoss = 0;
+for (let px = 0; px <= tc.width; px += 4)
+  for (let py = 0; py <= tc.height; py += 4) {
+    const [x, y] = toWorld(px, py);
+    maxLoss = Math.max(maxLoss, f(x, y));
+  }
+const terrainImg = document.createElement('canvas');
+terrainImg.width = tc.width; terrainImg.height = tc.height;
+{
+  const g = terrainImg.getContext('2d');
+  for (let px = 0; px < tc.width; px += 4)
+    for (let py = 0; py < tc.height; py += 4) {
+      const [x, y] = toWorld(px, py);
+      const t = Math.pow(f(x, y) / maxLoss, 0.45); // 开方让低谷层次更明显
+      // 颜色插值：深蓝(8,20,60) → 青 → 黄(255,220,80)
+      const r = Math.round(8   + 247 * Math.pow(t, 1.6));
+      const gc = Math.round(20 + 200 * Math.pow(t, 0.8));
+      const b = Math.round(60 + 20  * t);
+      g.fillStyle = `rgb(${r},${gc},${b})`;
+      g.fillRect(px, py, 4, 4);
+    }
+}
+
+// ============ 炼丹状态 ============
+let ball = { x: -3.4, y: 2.2 };     // 当前位置
+let vel = { x: 0, y: 0 };           // 动量速度
+let adamM = { x: 0, y: 0 }, adamV = { x: 0, y: 0 }, adamT = 0;
+let trail = [];                      // 轨迹
+let history = [];                    // 损失历史
+let running = false, crashed = false;
+
+function resetBall(x, y) {
+  ball = { x: x, y: y };
+  vel = { x: 0, y: 0 };
+  adamM = { x: 0, y: 0 }; adamV = { x: 0, y: 0 }; adamT = 0;
+  trail = []; history = [];
+  crashed = false; document.getElementById('alert').textContent = '';
+  updateStats(); draw();
+}
+
+// ============ 三种优化器的一步更新 ============
+function step() {
+  const lr    = parseFloat(document.getElementById('lr').value);
+  const beta  = parseFloat(document.getElementById('beta').value);
+  const opt   = document.getElementById('opt').value;
+  const dx = gx(ball.x, ball.y), dy = gy(ball.x, ball.y);
+
+  if (opt === 'sgd') {
+    ball.x -= lr * dx; ball.y -= lr * dy;
+  } else if (opt === 'momentum') {
+    vel.x = beta * vel.x - lr * dx;
+    vel.y = beta * vel.y - lr * dy;
+    ball.x += vel.x; ball.y += vel.y;
+  } else { // adam
+    adamT++;
+    adamM.x = 0.9 * adamM.x + 0.1 * dx;
+    adamM.y = 0.9 * adamM.y + 0.1 * dy;
+    adamV.x = 0.999 * adamV.x + 0.001 * dx * dx;
+    adamV.y = 0.999 * adamV.y + 0.001 * dy * dy;
+    const mhx = adamM.x / (1 - Math.pow(0.9, adamT)),   vhx = adamV.x / (1 - Math.pow(0.999, adamT));
+    const mhy = adamM.y / (1 - Math.pow(0.9, adamT)),   vhy = adamV.y / (1 - Math.pow(0.999, adamT));
+    ball.x -= lr * mhx / (Math.sqrt(vhx) + 1e-8);
+    ball.y -= lr * mhy / (Math.sqrt(vhy) + 1e-8);
+  }
+
+  trail.push([ball.x, ball.y]);
+  history.push(f(ball.x, ball.y));
+
+  // 飞出边界 = 发散（学习率过大的经典事故）
+  if (Math.abs(ball.x) > 5.5 || Math.abs(ball.y) > 3.5) {
+    crashed = true; running = false;
+    document.getElementById('alert').textContent = '💥 步子太大，小球飞出了山谷（发散）！调小学习率再试。';
+  }
+}
+
+// ============ 绘制 ============
+function draw() {
+  tctx.drawImage(terrainImg, 0, 0);
+  // 轨迹
+  tctx.strokeStyle = 'rgba(255,255,255,0.75)'; tctx.lineWidth = 2;
+  tctx.beginPath();
+  trail.forEach((p, i) => {
+    const [px, py] = toPx(p[0], p[1]);
+    i === 0 ? tctx.moveTo(px, py) : tctx.lineTo(px, py);
+  });
+  tctx.stroke();
+  // 谷底标记
+  const [ox, oy] = toPx(0, 0);
+  tctx.strokeStyle = '#3fb950'; tctx.lineWidth = 2;
+  tctx.beginPath(); tctx.arc(ox, oy, 8, 0, Math.PI * 2); tctx.stroke();
+  // 小球
+  const [bx, by] = toPx(ball.x, ball.y);
+  tctx.fillStyle = crashed ? '#f85149' : '#ffd33d';
+  tctx.beginPath(); tctx.arc(bx, by, 9, 0, Math.PI * 2); tctx.fill();
+  tctx.strokeStyle = '#fff'; tctx.lineWidth = 2; tctx.stroke();
+
+  drawChart();
+}
+
+function drawChart() {
+  cctx.fillStyle = '#0d1117'; cctx.fillRect(0, 0, cc.width, cc.height);
+  if (history.length < 2) return;
+  const maxL = Math.log10(Math.max(...history) + 1e-9);
+  const minL = Math.log10(Math.min(...history) + 1e-9);
+  cctx.strokeStyle = '#58a6ff'; cctx.lineWidth = 2;
+  cctx.beginPath();
+  history.forEach((h, i) => {
+    const px = i / (history.length - 1) * (cc.width - 10) + 5;
+    const t = (Math.log10(h + 1e-9) - minL) / (maxL - minL || 1);
+    const py = cc.height - 10 - t * (cc.height - 20);
+    i === 0 ? cctx.moveTo(px, py) : cctx.lineTo(px, py);
+  });
+  cctx.stroke();
+}
+
+function updateStats() {
+  document.getElementById('stStep').textContent = history.length;
+  document.getElementById('stState').textContent = crashed ? '💥 发散' : (running ? '🏃 下山中' : '⏸ 暂停');
+  document.getElementById('stX').textContent = ball.x.toFixed(3);
+  document.getElementById('stY').textContent = ball.y.toFixed(3);
+  document.getElementById('stLoss').textContent = f(ball.x, ball.y).toFixed(4);
+  document.getElementById('stDist').textContent = Math.hypot(ball.x, ball.y).toFixed(3);
+}
+
+// ============ 主循环 ============
+function frame() {
+  if (running) {
+    const n = parseInt(document.getElementById('speed').value);
+    for (let i = 0; i < n && !crashed; i++) step();
+    if (history.length > 400) { history = history.slice(-400); trail = trail.slice(-400); }
+    draw(); updateStats();
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// ============ 控件绑定 ============
+document.getElementById('lr').oninput    = e => document.getElementById('lrVal').textContent   = parseFloat(e.target.value).toFixed(3);
+document.getElementById('beta').oninput  = e => document.getElementById('betaVal').textContent = parseFloat(e.target.value).toFixed(2);
+document.getElementById('speed').oninput = e => document.getElementById('speedVal').textContent = e.target.value;
+
+document.getElementById('btnRun').onclick = e => {
+  if (crashed) return;
+  running = !running;
+  e.target.textContent = running ? '⏸ 暂停' : '▶ 开始';
+  updateStats();
+};
+document.getElementById('btnReset').onclick  = () => resetBall(-3.4, 2.2);
+document.getElementById('btnRandom').onclick = () => {
+  resetBall(XMIN + 0.15 + Math.random() * (XMAX - XMIN - 0.3) ,
+            YMIN + 0.15 + Math.random() * (YMAX - YMIN - 0.3));
+};
+
+// 点击地形任意位置放置起点
+tc.onclick = e => {
+  const r = tc.getBoundingClientRect();
+  const px = (e.clientX - r.left) / r.width * tc.width;
+  const py = (e.clientY - r.top) / r.height * tc.height;
+  const [x, y] = toWorld(px, py);
+  resetBall(x, y);
+};
+
+resetBall(-3.4, 2.2);
+</script>
+</body>
+</html>

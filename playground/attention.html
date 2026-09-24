@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>👀 注意力热力图</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0d1117; color: #e6edf3; font-family: "Microsoft YaHei", "PingFang SC", sans-serif; padding: 20px; }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  .sub { color: #8b949e; font-size: 13px; margin-bottom: 16px; line-height: 1.7; }
+  .panel { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+  textarea {
+    width: 100%; background: #0d1117; color: #e6edf3; border: 1px solid #30363d;
+    border-radius: 8px; padding: 10px 12px; font-size: 15px; font-family: inherit; resize: vertical;
+  }
+  button {
+    background: #21262d; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px;
+    padding: 7px 18px; font-size: 14px; cursor: pointer; margin-top: 10px;
+  }
+  button:hover { border-color: #58a6ff; }
+  canvas { display: block; width: 100%; background: #0d1117; border-radius: 8px; }
+  .row2 { display: flex; gap: 14px; flex-wrap: wrap; }
+  .row2 > div { flex: 1 1 400px; }
+  .barItem { display: flex; align-items: center; gap: 8px; margin: 5px 0; font-size: 14px; }
+  .barLabel { min-width: 40px; text-align: center; background: #21262d; border-radius: 4px; padding: 3px 5px; cursor: pointer; }
+  .barLabel.sel { border: 1px solid #58a6ff; color: #58a6ff; }
+  .barTrack { flex: 1; background: #21262d; border-radius: 4px; height: 18px; position: relative; }
+  .barFill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: linear-gradient(90deg,#1f6feb,#58a6ff); }
+  .barPct { min-width: 52px; font-family: Consolas, monospace; font-size: 12px; color: #8b949e; }
+  .hint { color: #8b949e; font-size: 12px; margin-top: 10px; line-height: 1.8; }
+  .note { color: #8b949e; font-size: 12px; line-height: 1.8; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>👀 注意力热力图</h1>
+  <div class="sub">输入一句话（中文按字切分，英文按空格），实时计算 softmax(QKᵀ/√d) 注意力权重。<b>每一行 = 行首的词在"关注"各列词的程度</b>（颜色越红权重越高）。点击热力图或下方词块，查看单个词的注意力分配。</div>
+
+  <div class="panel">
+    <textarea id="sentence" rows="2">小明把苹果给了小红，她很开心</textarea>
+    <button id="btnGo">🔄 重新计算</button>
+    <span class="hint">试试自带代词的句子（"她/它/这"往往要看回前面的词），或换成英文：The cat sat on the mat because it was tired</span>
+  </div>
+
+  <div class="panel">
+    <canvas id="heat" width="900" height="620"></canvas>
+  </div>
+
+  <div class="row2">
+    <div class="panel">
+      <div style="font-size:14px;margin-bottom:10px;">👆 点击选择一个词，看它把注意力分给了谁</div>
+      <div id="bars"></div>
+    </div>
+    <div class="panel note">
+      <b style="color:#e6edf3;">这是什么原理？</b><br><br>
+      ① 每个词先变成一个向量 embedding（本页用固定种子的确定性向量模拟）；<br>
+      ② 分别乘两个投影矩阵得到 Q（查询）和 K（键）；<br>
+      ③ 第 i 行第 j 列的分数 = Q<sub>i</sub>·K<sub>j</sub> / √d（查询与键的相似度）；<br>
+      ④ 每行做 softmax 归一化成概率（一行加起来 = 1）。<br><br>
+      ⚠️ 教学演示：向量与矩阵由固定种子生成，<b>不是</b>真实训练出的模型权重；目的是让你看清"注意力权重是怎么算出来的、长什么样"。真实 Transformer 中这些 Q/K 投影是学出来的，因此能学到真正的语法与指代关系。<br><br>
+      📖 回到知识库：第 7 章《Transformer 与注意力机制》
+    </div>
+  </div>
+</div>
+
+<script>
+// ================= 确定性伪随机（固定种子，保证同一句话每次结果一致） =================
+function mulberry32(seed) {
+  return function() {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function strHash(s) { let h = 2166136261; for (const ch of s) { h ^= ch.codePointAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+
+const D = 16; // 向量维度
+
+// 词 → 确定性 embedding：种子由词本身决定（同一词永远同一向量，还能看到相同词的高权重）
+function embed(token) {
+  const rnd = mulberry32(strHash(token));
+  const v = new Array(D);
+  for (let i = 0; i < D; i++) v[i] = rnd() * 2 - 1;
+  // 加一点位置信息（sin/cos 位置编码思想），让顺序起作用
+  const pos = strHash(token + '#pos') % 100;
+  for (let i = 0; i < D; i += 2) {
+    v[i]   += Math.sin(pos / Math.pow(10000, i / D)) * 0.3;
+    v[i+1] += Math.cos(pos / Math.pow(10000, i / D)) * 0.3;
+  }
+  return v;
+}
+
+// 固定投影矩阵 Wq、Wk（种子 2026）
+function makeMat(seed) {
+  const rnd = mulberry32(seed);
+  const m = [];
+  for (let i = 0; i < D; i++) { m.push([]); for (let j = 0; j < D; j++) m[i].push((rnd() * 2 - 1) / Math.sqrt(D)); }
+  return m;
+}
+const WQ = makeMat(2026), WK = makeMat(77);
+
+function proj(v, M) { // v(D) × M(D×D)
+  const out = new Array(D).fill(0);
+  for (let j = 0; j < D; j++) for (let i = 0; i < D; i++) out[j] += v[i] * M[i][j];
+  return out;
+}
+const dot = (a, b) => a.reduce((s, x, i) => s + x * b[i], 0);
+
+function softmax(arr) {
+  const m = Math.max(...arr);
+  const ex = arr.map(v => Math.exp(v - m));
+  const s = ex.reduce((a, b) => a + b, 0);
+  return ex.map(e => e / s);
+}
+
+// ================= 分词（中文按字、英文按空格） =================
+function tokenize(text) {
+  const t = text.trim().replace(/\s+/g, ' ');
+  if (!t) return [];
+  const hasCJK = /[\u4e00-\u9fff]/.test(t);
+  let toks;
+  if (hasCJK) {
+    toks = Array.from(t).filter(c => c !== ' ');
+  } else {
+    toks = t.split(' ');
+  }
+  return toks.slice(0, 20); // 最多 20 个词，保证图不挤
+}
+
+// ================= 计算注意力矩阵 =================
+let tokens = [], weights = [], selected = -1;
+
+function compute() {
+  tokens = tokenize(document.getElementById('sentence').value);
+  if (!tokens.length) tokens = ['空', '句', '子'];
+  const E = tokens.map(embed);
+  const Q = E.map(v => proj(v, WQ));
+  const K = E.map(v => proj(v, WK));
+  weights = Q.map(q => softmax(K.map(k => dot(q, k) / Math.sqrt(D))));
+  selected = -1;
+  drawHeat(); drawBars();
+}
+
+// ================= 热力图绘制 =================
+const cv = document.getElementById('heat'), ctx = cv.getContext('2d');
+
+// 权重 → 颜色（深蓝→青→黄→红，越红越高）
+function wColor(w, max) {
+  const t = Math.pow(w / max, 0.6);
+  const stops = [[13,27,62],[25,80,140],[88,166,255],[255,214,92],[248,81,73]];
+  const pos = t * (stops.length - 1), i = Math.min(Math.floor(pos), stops.length - 2), r = pos - i;
+  const c = stops[i].map((v, k) => Math.round(v + (stops[i+1][k] - v) * r));
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+
+function drawHeat() {
+  const n = tokens.length;
+  ctx.fillStyle = '#0d1117'; ctx.fillRect(0, 0, cv.width, cv.height);
+  const margin = 70, cell = Math.min((cv.width - margin - 10) / n, (cv.height - margin - 10) / n, 46);
+  const gridW = cell * n;
+  const x0 = margin + (cv.width - margin - gridW) / 2 + 20, y0 = margin;
+  let maxW = 0; weights.forEach(r => r.forEach(w => maxW = Math.max(maxW, w)));
+
+  // 顶部列标签（旋转 45°）
+  ctx.save();
+  ctx.fillStyle = '#8b949e'; ctx.font = '13px "Microsoft YaHei"'; ctx.textAlign = 'left';
+  tokens.forEach((t, j) => {
+    ctx.save();
+    ctx.translate(x0 + j * cell + cell / 2, y0 - 8);
+    ctx.rotate(-Math.PI / 4);
+    ctx.fillText(t, 0, 0);
+    ctx.restore();
+  });
+  ctx.restore();
+
+  // 左侧行标签
+  ctx.fillStyle = '#8b949e'; ctx.font = '14px "Microsoft YaHei"'; ctx.textAlign = 'right';
+  tokens.forEach((t, i) => ctx.fillText(t, x0 - 8, y0 + i * cell + cell / 2 + 5));
+
+  // 单元格
+  tokens.forEach((_, i) => tokens.forEach((_, j) => {
+    ctx.fillStyle = wColor(weights[i][j], maxW);
+    ctx.fillRect(x0 + j * cell + 1, y0 + i * cell + 1, cell - 2, cell - 2);
+  }));
+
+  // 选中行高亮
+  if (selected >= 0) {
+    ctx.strokeStyle = '#58a6ff'; ctx.lineWidth = 2;
+    ctx.strokeRect(x0, y0 + selected * cell, gridW, cell);
+  }
+
+  // 点击选择行
+  cv.onclick = e => {
+    const r = cv.getBoundingClientRect();
+    const px = (e.clientX - r.left) / r.width * cv.width, py = (e.clientY - r.top) / r.height * cv.height;
+    const j = Math.floor((px - x0) / cell), i = Math.floor((py - y0) / cell);
+    if (i >= 0 && i < n && j >= 0 && j < n) { selected = i; drawHeat(); drawBars(); }
+  };
+}
+
+// ================= 条形图 =================
+function drawBars() {
+  const box = document.getElementById('bars');
+  box.innerHTML = '';
+  if (selected < 0) {
+    box.innerHTML = '<span style="color:#8b949e;font-size:13px;">（尚未选择。点击热力图任意一行，或点击下方词块）</span>';
+  }
+  // 词块选择器
+  const chipRow = document.createElement('div');
+  chipRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;';
+  tokens.forEach((t, i) => {
+    const c = document.createElement('span');
+    c.className = 'barLabel' + (i === selected ? ' sel' : '');
+    c.textContent = t;
+    c.onclick = () => { selected = i; drawHeat(); drawBars(); };
+    chipRow.appendChild(c);
+  });
+  box.appendChild(chipRow);
+
+  if (selected < 0) return;
+  const row = weights[selected];
+  const max = Math.max(...row);
+  row.forEach((w, j) => {
+    const item = document.createElement('div'); item.className = 'barItem';
+    const lab = document.createElement('span'); lab.className = 'barLabel'; lab.textContent = tokens[j];
+    const track = document.createElement('div'); track.className = 'barTrack';
+    const fill = document.createElement('div'); fill.className = 'barFill';
+    fill.style.width = (w / max * 100).toFixed(1) + '%';
+    track.appendChild(fill);
+    const pct = document.createElement('span'); pct.className = 'barPct'; pct.textContent = (w * 100).toFixed(1) + '%';
+    item.append(lab, track, pct);
+    box.appendChild(item);
+  });
+  const sum = document.createElement('div');
+  sum.style.cssText = 'margin-top:8px;color:#8b949e;font-size:12px;';
+  sum.textContent = `「${tokens[selected]}」对 ${tokens.length} 个词的注意力，加起来正好 = 100%（softmax 的作用）`;
+  box.appendChild(sum);
+}
+
+document.getElementById('btnGo').onclick = compute;
+document.getElementById('sentence').addEventListener('keydown', e => { if (e.key === 'Enter' && e.ctrlKey) compute(); });
+
+compute();
+</script>
+</body>
+</html>

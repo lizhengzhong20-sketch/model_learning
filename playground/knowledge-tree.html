@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🌳 交互式知识树 · 力导向动态图</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  :root { --bg:#0d1117; --panel:#161b22; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --blue:#58a6ff; }
+  body { background:var(--bg); color:var(--text); font-family:"Microsoft YaHei","PingFang SC",sans-serif; padding:22px; }
+  .wrap { max-width:1380px; margin:0 auto; }
+  header h1 { font-size:25px; letter-spacing:1px; }
+  header h1 span { background:linear-gradient(90deg,#58a6ff,#f778ba); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  header .sub { color:var(--muted); font-size:13px; margin:6px 0 14px; line-height:1.8; }
+
+  .toolbar { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
+  .modes { display:flex; border:1px solid var(--border); border-radius:9px; overflow:hidden; }
+  .modes button { background:var(--panel); color:var(--muted); border:none; padding:8px 16px; font-size:13px; cursor:pointer; }
+  .modes button.on { background:#21262d; color:var(--blue); font-weight:600; }
+  .search { flex:1; min-width:210px; background:var(--panel); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:8px 13px; font-size:13px; outline:none; }
+  .search:focus { border-color:var(--blue); }
+  .zoomBtns { display:flex; gap:6px; }
+  .zoomBtns button { background:var(--panel); border:1px solid var(--border); color:var(--text); border-radius:7px; padding:7px 11px; font-size:13px; cursor:pointer; }
+  .partPills { display:flex; gap:7px; flex-wrap:wrap; }
+  .pill { border:1px solid var(--border); background:var(--panel); color:var(--text); border-radius:18px; padding:5px 12px; font-size:12px; cursor:pointer; }
+  .pill.on { border-color:var(--pc); box-shadow:0 0 0 1px var(--pc); }
+
+  .layout { display:flex; gap:16px; align-items:flex-start; }
+  .stage { flex:1 1 820px; min-width:0; }
+  #graphBox { position:relative; background:radial-gradient(ellipse at 50% 40%, #131a24 0%, #0d1117 70%); border:1px solid var(--border); border-radius:12px; overflow:hidden; height:840px; cursor:grab; }
+  #graphBox.grabbing { cursor:grabbing; }
+  #graphBox svg { width:100%; height:100%; display:block; }
+  .legend { position:absolute; left:12px; bottom:10px; font-size:11px; color:var(--muted); line-height:1.9; pointer-events:none; }
+  .legend i { display:inline-block; width:9px; height:9px; border-radius:50%; margin:0 4px -1px 8px; }
+  aside { flex:0 1 330px; position:sticky; top:22px; background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; max-height:calc(100vh - 50px); overflow-y:auto; }
+  @media (max-width:1020px){ .layout{flex-direction:column;} aside{position:static;width:100%;flex:1 1 auto;} #graphBox{height:620px;} }
+
+  /* ===== 力导向图元素 ===== */
+  .edge { stroke:#2c3644; stroke-width:2; }
+  .edge.main { stroke:#3d4a5c; stroke-dasharray:7 6; animation:flow 1.5s linear infinite; }
+  .edge.concept { stroke-width:1.4; stroke-dasharray:3 5; opacity:.6; }
+  .edge.lit { stroke:var(--ec,#58a6ff); stroke-width:3; stroke-dasharray:7 6; animation:flow .8s linear infinite; filter:drop-shadow(0 0 5px var(--ec,#58a6ff)); opacity:1; }
+  .edge.dim { opacity:.07; }
+  @keyframes flow { to { stroke-dashoffset:-26; } }
+  .node { cursor:pointer; transition:opacity .25s; }
+  .node circle.body { fill:#161b22; stroke-width:2.4; transition:stroke-width .15s; }
+  .node:hover circle.body { stroke-width:4; filter:drop-shadow(0 0 10px var(--nc)); }
+  .node.sel circle.body { stroke-width:4.5; filter:drop-shadow(0 0 12px var(--nc)); }
+  .node.dim { opacity:.1; }
+  .node .l1 { font-size:16px; }
+  .node .l2 { font-size:13px; font-weight:700; fill:#e6edf3; }
+  .node .l3 { font-size:9.5px; fill:#8b949e; }
+  .node.kc .l2 { font-size:10.5px; }
+  .pulse { fill:none; stroke:#f778ba; stroke-width:2.5; opacity:0; pointer-events:none; }
+  .pulse.run { animation:pulse 1.1s ease-out 2; }
+  @keyframes pulse { 0%{opacity:.9; r:16;} 100%{opacity:0; r:95;} }
+
+  /* ===== 清单视图 ===== */
+  #listView { display:none; }
+  .part2 { margin-bottom:24px; }
+  .part2-head { display:flex; gap:10px; align-items:baseline; padding:10px 14px; border:1px solid var(--border); border-left:4px solid var(--pc); border-radius:10px; margin-bottom:12px; flex-wrap:wrap; background:linear-gradient(90deg,rgba(255,255,255,.03),transparent); }
+  .part2-head h2 { font-size:16px; color:var(--pc); }
+  .part2-head .tag { color:var(--muted); font-size:12px; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:12px; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:13px 15px; cursor:pointer; transition:transform .15s,border-color .15s; overflow:hidden; }
+  .card:hover { transform:translateY(-3px); border-color:var(--pc); }
+  .card.sel { border-color:var(--pc); box-shadow:0 0 0 1px var(--pc); }
+  .card .top { display:flex; align-items:center; gap:9px; }
+  .card .emoji { font-size:22px; }
+  .card h3 { font-size:15px; flex:1; }
+  .ability { font-size:11px; color:var(--pc); border:1px solid var(--pc); border-radius:10px; padding:1px 8px; }
+  .card .desc { color:var(--muted); font-size:12px; line-height:1.7; margin:8px 0; }
+  .card .meta { display:flex; gap:8px; flex-wrap:wrap; align-items:center; font-size:12px; color:var(--muted); }
+  .chip { background:#21262d; border-radius:10px; padding:2px 9px; }
+  .chip.link { color:var(--blue); cursor:pointer; }
+  .toggle { color:var(--blue); font-size:12px; }
+  .pages { max-height:0; overflow:hidden; transition:max-height .3s; }
+  .card.open .pages { max-height:420px; }
+  .pages ul { list-style:none; margin-top:10px; border-top:1px dashed var(--border); padding-top:8px; }
+  .pages li { display:flex; align-items:center; gap:8px; padding:5px 2px; font-size:13px; }
+  .pages li a { color:var(--text); text-decoration:none; flex:1; }
+  .pages li a:hover { color:var(--blue); }
+  .pages li .st { font-size:10px; color:#d29922; letter-spacing:-1px; }
+  .pages li .pf { font-family:Consolas,monospace; font-size:11px; color:#3fb950; }
+
+  aside h3 { font-size:16px; margin-bottom:4px; }
+  .a-sub { color:var(--muted); font-size:12px; margin-bottom:12px; }
+  .a-desc { font-size:13px; line-height:1.8; color:#c9d1d9; margin-bottom:10px; }
+  .a-concepts { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+  .a-concepts span { font-size:11px; background:#21262d; border:1px solid var(--border); border-radius:10px; padding:2px 9px; color:#c9d1d9; }
+  .a-sec { font-size:12px; color:var(--muted); margin:10px 0 6px; }
+  .a-list a { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px; color:var(--text); text-decoration:none; font-size:13px; }
+  .a-list a:hover { background:#21262d; color:var(--blue); }
+  .a-list .st { font-size:10px; color:#d29922; letter-spacing:-1px; margin-left:auto; }
+  .placeholder { color:var(--muted); font-size:13px; line-height:1.9; }
+  .footer { color:var(--muted); font-size:12px; margin-top:22px; line-height:1.9; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🌳 <span>交互式知识树</span></h1>
+    <div class="sub">🌀 力导向动态图：节点带物理感漂浮，<b>抓住任何节点拖动甩飞</b>，松手自动回弹归位；悬停聚焦上下游链路；点击查看页面清单并直达正文。小圆点是横跨多章的关键概念（向量、注意力、双塔、RLHF…）。</div>
+  </header>
+
+  <div class="toolbar">
+    <div class="modes">
+      <button id="mGraph" class="on">🌀 力导向图</button>
+      <button id="mList">📋 章节清单</button>
+    </div>
+    <input class="search" id="search" placeholder="🔍 搜索后回车定位：章名 / 能力 / 概念 / 页面名，如 双塔、因果、部署、LSTM…">
+    <div class="partPills" id="partPills"></div>
+    <div class="zoomBtns">
+      <button id="zin">➕</button><button id="zout">➖</button><button id="zfit">⤢ 适配</button><button id="phys" title="暂停/恢复物理模拟">⏸ 物理</button>
+    </div>
+  </div>
+
+  <div class="layout">
+    <div class="stage">
+      <div id="graphBox">
+        <svg id="graph"><g id="world"></g></svg>
+        <div class="legend">
+          <i style="background:#58a6ff"></i>第一篇 起步
+          <i style="background:#3fb950"></i>第二篇 机器学习
+          <i style="background:#d29922"></i>第三篇 深度学习
+          <i style="background:#f778ba"></i>第四篇 方向
+          <i style="background:#bc8cff"></i>第五篇 前沿 ｜ ○ 大=全书枢纽 · 小点=关键概念
+        </div>
+      </div>
+      <div id="listView"></div>
+    </div>
+    <aside id="detail">
+      <div class="placeholder">👆 点击任意<b>章节点</b>或左侧卡片，这里会显示：<br><br>· 本章定位与关键概念<br>· 全部页面 + 难度 + 直达链接<br>· 前置章节（先学什么）<br>· 后续章节（学完能去哪）<br><br>点<b>概念小节点</b>可看它串起了哪几章。</div>
+    </aside>
+  </div>
+
+  <div class="footer">
+    🕹️ 图操作：拖节点（甩飞回弹） · 拖空白平移 · 滚轮缩放 · 悬停聚焦 ｜ 页面链接指向 <b>../docs/…</b> 的 Markdown 原文件（克隆仓库后本地可用）<br>
+    📖 返回知识库总目录请打开仓库根目录的 README.md · 本页离线可用，无任何外部依赖
+  </div>
+</div>
+
+<script>
+// ==================== 数据：五篇十三章 + 关键概念 ====================
+const PCOLORS = ['#58a6ff','#3fb950','#d29922','#f778ba','#bc8cff'];
+const DATA = [
+  { name:"第一篇 · 起步准备", chapters:[
+    { no:0, emoji:"🗺️", title:"学前必读", ability:"", diff:1, hub:false, prereq:[], concepts:["页面结构","三种读法"],
+      desc:"怎么用这套知识库：页面七步结构、三种读法、学习方法与 FAQ。",
+      dir:"../docs/1-起步准备/00-学前必读",
+      pages:[["README.md","本章导览",1]] },
+    { no:1, emoji:"🛠️", title:"环境与工具", ability:"", diff:1, hub:false, prereq:[0], concepts:["conda","Jupyter","Git"],
+      desc:"Python 环境、Jupyter、常用数据集与工具链，按需查阅。",
+      dir:"../docs/1-起步准备/01-环境与工具",
+      pages:[["README.md","本章导览",1],["01-开发环境搭建.md","开发环境搭建",1],["02-数据集与工具链.md","数据集与工具链",1],["99-生产实战.md","生产实战：团队工程化日常",2]] },
+    { no:2, emoji:"📐", title:"数学基础", ability:"", diff:2, hub:false, prereq:[1], concepts:["矩阵向量","梯度","贝叶斯"],
+      desc:"线代 / 微积分 / 概率统计——只讲 AI 用得到的，用到再回查。",
+      dir:"../docs/1-起步准备/02-数学基础",
+      pages:[["README.md","本章导览",1],["01-为什么要学数学.md","为什么要学数学",1],["02-线性代数.md","线性代数",2],["03-微积分与梯度.md","微积分与梯度",2],["04-概率与统计.md","概率与统计",2],["99-生产实战.md","生产实战：工作用多少数学",2]] },
+  ]},
+  { name:"第二篇 · 经典机器学习", chapters:[
+    { no:3, emoji:"🤖", title:"机器学习", ability:"", diff:2, hub:true, prereq:[2], concepts:["回归分类","判别vs生成","集成"],
+      desc:"回归、分类、聚类降维、集成学习、评估调优——后面一切的起点。",
+      dir:"../docs/2-经典机器学习/03-机器学习",
+      pages:[["README.md","本章导览",1],["01-机器学习全景.md","机器学习全景",2],["02-线性回归.md","线性回归",2],["03-逻辑回归与分类.md","逻辑回归与分类",2],["04-决策树与集成学习.md","决策树与集成学习",2],["05-支持向量机.md","支持向量机",3],["06-聚类与降维.md","聚类与降维",2],["07-模型评估与调优.md","模型评估与调优",3],["99-生产实战.md","生产实战：表格数据项目 0→1",2]] },
+  ]},
+  { name:"第三篇 · 深度学习", chapters:[
+    { no:4, emoji:"🧠", title:"深度学习基础", ability:"", diff:3, hub:true, prereq:[3], concepts:["反向传播","优化器","分布式","部署"],
+      desc:"神经网络原理、训练全流程、PyTorch、分布式训练与模型规模、推理与部署。",
+      dir:"../docs/3-深度学习/04-深度学习基础",
+      pages:[["README.md","本章导览",1],["01-神经网络是怎么炼成的.md","神经网络是怎么炼成的",3],["02-训练一个模型的完整流程.md","训练一个模型的完整流程",3],["03-PyTorch快速上手.md","PyTorch 快速上手",2],["04-分布式训练与模型规模.md","分布式训练与模型规模",3],["05-推理与部署.md","推理与部署",3],["99-生产实战.md","生产实战：DL 项目全生命",2]] },
+  ]},
+  { name:"第四篇 · 专业方向", chapters:[
+    { no:5, emoji:"👁️", title:"计算机视觉", ability:"看见", diff:3, hub:false, prereq:[4], concepts:["CNN","检测分割","ViT"],
+      desc:"CNN、检测 / 分割、ViT——让机器读懂图像。",
+      dir:"../docs/4-专业方向/05-计算机视觉",
+      pages:[["README.md","本章导览",1],["01-CNN卷积神经网络.md","CNN 卷积神经网络",3],["02-视觉三大任务.md","视觉三大任务",3],["03-ViT视觉Transformer.md","ViT 视觉 Transformer",4],["99-生产实战.md","生产实战：缺陷检测项目",2]] },
+    { no:6, emoji:"📈", title:"时间序列", ability:"预知", diff:3, hub:false, prereq:[4], concepts:["ARIMA","LSTM","时序基础模型"],
+      desc:"ARIMA、RNN/LSTM、现代时序模型——让机器预测未来。",
+      dir:"../docs/4-专业方向/06-时间序列",
+      pages:[["README.md","本章导览",1],["01-时间序列分析入门.md","时间序列分析入门",2],["02-RNN与LSTM.md","RNN 与 LSTM",3],["03-现代时间序列模型.md","现代时间序列模型",4],["99-生产实战.md","生产实战：销量预测落地",2]] },
+    { no:7, emoji:"💬", title:"NLP 与大语言模型", ability:"读写", diff:4, hub:true, prereq:[4], concepts:["词向量","Transformer","LLM","RLHF","RAG"],
+      desc:"词向量、Transformer、架构细节、LLM 全景、微调对齐、RAG 与 Agent——当代主线。",
+      dir:"../docs/4-专业方向/07-自然语言处理与LLM",
+      pages:[["README.md","本章导览",1],["01-词向量与embedding.md","词向量与 embedding",3],["02-Transformer与注意力机制.md","Transformer 与注意力机制",4],["03-Transformer架构细节与变体.md","Transformer 架构细节与变体",4],["04-大语言模型LLM全景.md","大语言模型 LLM 全景",4],["05-微调与对齐.md","微调与对齐 SFT/RLHF/DPO",4],["06-RAG与Agent.md","RAG 与 Agent",3],["99-生产实战.md","生产实战：LLM 应用落地",3]] },
+    { no:8, emoji:"🛍️", title:"推荐系统", ability:"匹配", diff:3, hub:false, prereq:[4,7], concepts:["协同过滤","矩阵分解","双塔召回"],
+      desc:"协同过滤、矩阵分解、双塔模型与向量召回、排序模型——万物向量检索的工业主场。",
+      dir:"../docs/4-专业方向/08-推荐系统",
+      pages:[["README.md","本章导览",1],["01-推荐系统全景.md","推荐系统全景",2],["02-协同过滤与矩阵分解.md","协同过滤与矩阵分解",3],["03-双塔模型与向量召回.md","双塔模型与向量召回",4],["04-排序模型.md","排序模型",3],["99-生产实战.md","生产实战：推荐系统上线",2]] },
+    { no:9, emoji:"🕸️", title:"图神经网络", ability:"关系", diff:3, hub:false, prereq:[4], concepts:["消息传递","GCN/GAT"],
+      desc:"图数据、消息传递、GCN/GAT——让机器理解“连接”。",
+      dir:"../docs/4-专业方向/09-图神经网络",
+      pages:[["README.md","本章导览",1],["01-图数据入门.md","图数据入门",2],["02-GNN核心模型.md","GNN 核心模型",4],["99-生产实战.md","生产实战：风控中的图方案",2]] },
+    { no:10, emoji:"🎮", title:"强化学习", ability:"决策", diff:3, hub:false, prereq:[4], concepts:["MDP","Q-Learning","PPO"],
+      desc:"MDP、Q-Learning、DQN/PPO——试错中学会行动，也是 RLHF 的地基。",
+      dir:"../docs/4-专业方向/10-强化学习",
+      pages:[["README.md","本章导览",1],["01-强化学习入门.md","强化学习入门",3],["02-深度强化学习.md","深度强化学习",4],["99-生产实战.md","生产实战：RL 落地版图",2]] },
+    { no:11, emoji:"🔍", title:"因果推断", ability:"归因", diff:3, hub:false, prereq:[2,3], concepts:["因果之梯","DID","因果发现"],
+      desc:"相关 ≠ 因果、因果之梯、DID、因果发现——分清“相关”与“因为”。",
+      dir:"../docs/4-专业方向/11-因果推断",
+      pages:[["README.md","本章导览",1],["01-相关不等于因果.md","相关不等于因果",3],["02-因果推断方法工具箱.md","因果推断方法工具箱",4],["99-生产实战.md","生产实战：投放效果评估",2]] },
+  ]},
+  { name:"第五篇 · 前沿与融合", chapters:[
+    { no:12, emoji:"🎨", title:"生成模型与多模态", ability:"创造", diff:4, hub:false, prereq:[4,5,7], concepts:["VAE","GAN","Diffusion","CLIP"],
+      desc:"生成全景、GAN、Diffusion、多模态、前沿技术地图（新技术蓄水池）。",
+      dir:"../docs/5-前沿与融合/12-生成模型与多模态",
+      pages:[["README.md","本章导览",1],["01-生成模型全景.md","生成模型全景",4],["02-对抗生成网络GAN.md","对抗生成网络 GAN",4],["03-扩散模型Diffusion.md","扩散模型 Diffusion",4],["04-多模态模型.md","多模态模型",4],["05-前沿技术地图.md","前沿技术地图",3],["99-生产实战.md","生产实战：AIGC 产品上线",3]] },
+  ]},
+];
+
+// 章间依赖边 [from, to, 是否主线, 说明]
+const EDGES = [
+  [0,1,true,""],[1,2,true,""],[2,3,true,""],[3,4,true,""],
+  [4,5,true,""],[4,6,true,""],[4,7,true,""],[4,9,true,""],[4,10,true,""],
+  [2,11,false,"统计基础"],[3,11,false,"评估思维"],
+  [7,8,false,"向量检索"],[9,8,false,"图召回"],
+  [7,12,false,"生成式主干"],[5,12,false,"视觉编解码"],
+  [10,7,false,"RLHF 地基"],
+];
+
+// 关键概念卫星节点：横跨多章的技术枢纽
+const CONCEPTS = [
+  { id:"k_emb",  t:"向量 embedding",  link:[7,8,12], desc:"万物皆可向量：词、用户、物品、图文——相似度 = 向量夹角。串起词向量(7)、双塔召回(8)、CLIP 多模态(12)。" },
+  { id:"k_attn", t:"注意力 Transformer", link:[5,6,7], desc:"现代 AI 的枢纽机制：按相关性分配注意力(QKV)。通往 LLM(7)、现代时序(6)、视觉前沿 ViT(5)。" },
+  { id:"k_2t",   t:"双塔召回", link:[8], desc:"用户塔 × 物品塔各自编码成向量再算相似度，毫秒级从百万物品捞 Top-K 的工业标准姿势。" },
+  { id:"k_rlhf", t:"RLHF 对齐", link:[7,10], desc:"用人类偏好打磨大模型：奖励模型 + 强化学习(PPO)。强化学习(10) 与 LLM(7) 在此交汇。" },
+  { id:"k_gan",  t:"GAN 对抗生成", link:[12], desc:"造假者与鉴定师互相逼强的生成范式，思想遗产扩散到安全与对齐。" },
+  { id:"k_diff", t:"Diffusion 扩散", link:[12], desc:"加噪再学去噪的生成范式，当今文生图主力（Stable Diffusion 三件套）。" },
+  { id:"k_dist", t:"分布式训练", link:[4], desc:"大模型多卡协同：数据并行 / 模型并行 / 流水线并行 / ZeRO。" },
+  { id:"k_dep",  t:"推理部署", link:[4], desc:"训练之外的另一半工程：ONNX / TensorRT / 量化 / 蒸馏 / 服务化。" },
+];
+
+// ==================== 通用工具 ====================
+const stars = d => "⭐".repeat(d);
+const chByNo = {}; DATA.forEach(p=>p.chapters.forEach(c=>{ c._pc=PCOLORS[DATA.indexOf(p)]; chByNo[c.no]=c; }));
+const partOf = no => DATA.find(p=>p.chapters.some(c=>c.no===no));
+const nextOf = no => { const out=[]; DATA.forEach(p=>p.chapters.forEach(c=>{ if(c.prereq.includes(no)) out.push(c.no); })); return out; };
+
+// ==================== 力导向物理图 ====================
+const world=document.getElementById('world'), svg=document.getElementById('graph'), box=document.getElementById('graphBox');
+const NS='http://www.w3.org/2000/svg';
+const mk=(t,attrs,parent)=>{ const e=document.createElementNS(NS,t); for(const k in attrs)e.setAttribute(k,attrs[k]); (parent||world).appendChild(e); return e; };
+
+const COLX=[380,620,860,1100,1340], CY=430;   // 各篇锚点（初始排布 + 弱引力）
+let nodes=[], edges=[];
+
+// —— 建节点：章 + 概念 ——
+DATA.forEach((p,pi)=>p.chapters.forEach(c=>{
+  nodes.push({ id:'c'+c.no, kind:'ch', no:c.no, ref:c, part:pi,
+    x:COLX[pi]+(Math.random()*80-40), y:CY+(Math.random()*300-150), vx:0, vy:0,
+    r:c.hub?46:38, color:c._pc, fixed:false });
+}));
+CONCEPTS.forEach((k,i)=>{
+  const anchorCh=chByNo[k.link[0]]; const pi=DATA.indexOf(partOf(k.link[0]));
+  nodes.push({ id:k.id, kind:'kc', ref:k, part:pi,
+    x:COLX[pi]+(Math.random()*120-60), y:CY+(Math.random()*300-150), vx:0, vy:0,
+    r:21, color:anchorCh._pc, fixed:false });
+});
+const nodeById=id=>nodes.find(n=>n.id===id);
+
+// —— 建边：章间依赖 + 概念连接 ——
+EDGES.forEach(([a,b,main,label])=>{
+  edges.push({ a:nodeById('c'+a), b:nodeById('c'+b), len:210, k:.022, main, type:'dep',
+    label:label||`第${a}章 → 第${b}章`, color:chByNo[b]._pc });
+});
+CONCEPTS.forEach(k=>k.link.forEach(no=>{
+  edges.push({ a:nodeById(k.id), b:nodeById('c'+no), len:105, k:.05, main:false, type:'concept',
+    label:`${k.t} ↔ 第${no}章`, color:'#8b949e' });
+}));
+
+// —— 渲染元素 ——
+const edgeEls=edges.map(e=>{
+  const el=mk('line',{class:'edge'+(e.main?' main':'')+(e.type==='concept'?' concept':''), style:`--ec:${e.color}`});
+  const ti=mk('title',{},el); ti.textContent=e.label;
+  el.addEventListener('click',()=>{ if(e.b.kind==='ch') select(e.b.no); });
+  return el;
+});
+const nodeEls=nodes.map(n=>{
+  const g=mk('g',{class:'node'+(n.kind==='kc'?' kc':''), style:`--nc:${n.color}`});
+  const body=mk('circle',{class:'body', r:n.r, stroke:n.color},g);
+  if(n.kind==='ch'){
+    mk('text',{class:'l1','text-anchor':'middle',y:-n.r+22},g).textContent=n.ref.emoji;
+    mk('text',{class:'l2','text-anchor':'middle',y:2},g).textContent=n.ref.title.length>9?n.ref.title.slice(0,9)+'…':n.ref.title;
+    mk('text',{class:'l3','text-anchor':'middle',y:19},g).textContent=`第${n.no}章${n.ref.ability?' · '+n.ref.ability:''}${n.ref.hub?' · ★枢纽':''}`;
+  } else {
+    mk('text',{class:'l2','text-anchor':'middle',y:-2},g).textContent=n.ref.t.length>7?n.ref.t.slice(0,7)+'…':n.ref.t;
+    mk('text',{class:'l3','text-anchor':'middle',y:12},g).textContent='概念';
+  }
+  const pulse=mk('circle',{class:'pulse', r:16},g);
+  pulse.id='pulse-'+n.id;
+  // 交互
+  g.addEventListener('mouseenter',()=>hover(n,true));
+  g.addEventListener('mouseleave',()=>hover(n,false));
+  g.addEventListener('pointerdown',ev=>{
+    ev.stopPropagation(); draggingNode=n; n.fixed=true; n._vx=0; n._vy=0;
+    g.setPointerCapture&&g.setPointerCapture(ev.pointerId);
+  });
+  g.addEventListener('pointermove',ev=>{
+    if(draggingNode!==n)return;
+    const p=toWorld(ev); n._px=p[0]; n._py=p[1];
+  });
+  g.addEventListener('pointerup',ev=>{
+    if(draggingNode!==n)return; draggingNode=null;
+    n.vx=n._dx||0; n.vy=n._dy||0; n.fixed=false;   // 甩飞：带一点出手速度
+  });
+  g.addEventListener('click',ev=>{ ev.stopPropagation();
+    if(n.kind==='ch') select(n.no); else selectConcept(n);
+    const pl=document.getElementById('pulse-'+n.id); pl.classList.remove('run'); void pl.getBBox; pl.classList.add('run');
+  });
+  return {g,body,n};
+});
+
+// —— 物理模拟 ——
+let physicsOn=true, draggingNode=null;
+function physics(){
+  // 节点互斥（库仑力）
+  for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){
+    const a=nodes[i],b=nodes[j];
+    let dx=a.x-b.x, dy=a.y-b.y, d2=dx*dx+dy*dy; if(d2<1)d2=1;
+    const d=Math.sqrt(d2), f=Math.min(90000/d2, 30);
+    const fx=dx/d*f, fy=dy/d*f;
+    a.vx+=fx*.5; a.vy+=fy*.5; b.vx-=fx*.5; b.vy-=fy*.5;
+  }
+  // 弹簧边
+  edges.forEach(e=>{
+    const dx=e.b.x-e.a.x, dy=e.b.y-e.a.y, d=Math.sqrt(dx*dx+dy*dy)||1;
+    const f=(d-e.len)*e.k, fx=dx/d*f, fy=dy/d*f;
+    e.a.vx+=fx; e.a.vy+=fy; e.b.vx-=fx; e.b.vy-=fy;
+  });
+  // 篇锚点弱引力（保持左→右的五篇结构感）
+  nodes.forEach(n=>{
+    if(n.kind!=='ch')return;
+    n.vx+=(COLX[n.part]-n.x)*.004;
+    n.vy+=(CY-n.y)*.0018;
+  });
+  // 概念节点轻阻尼漂浮
+  nodes.forEach(n=>{
+    if(draggingNode===n){ n.vx=0;n.vy=0; if(n._px!==undefined){ n._dx=(n._px-n.x)*.5; n._dy=(n._py-n.y)*.5; n.x=n._px; n.y=n._py; } return; }
+    n.vx*=.86; n.vy*=.86;
+    const sp=Math.hypot(n.vx,n.vy); if(sp>7){ n.vx*=7/sp; n.vy*=7/sp; }
+    n.x+=n.vx; n.y+=n.vy;
+    n.x=Math.max(80,Math.min(1650,n.x)); n.y=Math.max(60,Math.min(820,n.y));
+  });
+}
+function paint(){
+  edges.forEach((e,i)=>{ const el=edgeEls[i];
+    el.setAttribute('x1',e.a.x); el.setAttribute('y1',e.a.y);
+    el.setAttribute('x2',e.b.x); el.setAttribute('y2',e.b.y); });
+  nodeEls.forEach(({g,n})=>g.setAttribute('transform',`translate(${n.x},${n.y})`));
+}
+(function loop(){ if(physicsOn||draggingNode) physics(); paint(); requestAnimationFrame(loop); })();
+
+// —— 悬停聚焦 ——
+function hover(n,on){
+  const ids=new Set([n.id]);
+  edges.forEach((e,i)=>{
+    const hit=(e.a===n||e.b===n);
+    if(hit){ ids.add(e.a.id); ids.add(e.b.id); }
+    edgeEls[i].classList.toggle('lit',on&&hit);
+  });
+  nodeEls.forEach(({g,n:m})=>g.classList.toggle('dim',on&&!ids.has(m.id)));
+  edgeEls.forEach((el,i)=>{ if(on&&!edges[i].lit) ; el.classList.toggle('dim',on&&!(edges[i].a===n||edges[i].b===n)); });
+}
+
+// —— 视图（缩放/平移）——
+let vk=.8, vtx=60, vty=40;
+const applyView=()=>world.setAttribute('transform',`translate(${vtx},${vty}) scale(${vk})`);
+function toWorld(ev){ const r=box.getBoundingClientRect(); return [(ev.clientX-r.left-vtx)/vk,(ev.clientY-r.top-vty)/vk]; }
+function zoomAt(px,py,f){ const k=Math.min(2.6,Math.max(.3,vk*f)); vtx=px-(px-vtx)*k/vk; vty=py-(py-vty)*k/vk; vk=k; applyView(); }
+box.addEventListener('wheel',e=>{ e.preventDefault(); const r=box.getBoundingClientRect(); zoomAt(e.clientX-r.left,e.clientY-r.top,e.deltaY<0?1.13:.885); },{passive:false});
+let panDrag=null;
+box.addEventListener('pointerdown',e=>{ if(e.target.closest('.node'))return; panDrag=[e.clientX,e.clientY,vtx,vty]; box.classList.add('grabbing'); });
+window.addEventListener('pointermove',e=>{ if(!panDrag)return; vtx=panDrag[2]+e.clientX-panDrag[0]; vty=panDrag[3]+e.clientY-panDrag[1]; applyView(); });
+window.addEventListener('pointerup',()=>{ panDrag=null; box.classList.remove('grabbing'); });
+document.getElementById('zin').onclick =()=>zoomAt(box.clientWidth/2,box.clientHeight/2,1.25);
+document.getElementById('zout').onclick=()=>zoomAt(box.clientWidth/2,box.clientHeight/2,.8);
+document.getElementById('zfit').onclick=()=>{
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  nodes.forEach(n=>{ x0=Math.min(x0,n.x-n.r); y0=Math.min(y0,n.y-n.r); x1=Math.max(x1,n.x+n.r); y1=Math.max(y1,n.y+n.r); });
+  vk=Math.min(box.clientWidth/(x1-x0+120), box.clientHeight/(y1-y0+120), 1.6);
+  vtx=box.clientWidth/2-(x0+x1)/2*vk; vty=box.clientHeight/2-(y0+y1)/2*vk; applyView();
+};
+document.getElementById('phys').onclick=e=>{ physicsOn=!physicsOn; e.target.textContent=physicsOn?'⏸ 物理':'▶ 物理'; };
+
+// —— 篇筛选 ——
+let activePart=-1;
+function filterPart(i){
+  activePart=(activePart===i)?-1:i;
+  nodeEls.forEach(({g,n})=>{
+    let dim=false;
+    if(activePart>=0){
+      if(n.kind==='ch') dim=n.part!==activePart;
+      else dim=!n.ref.link.some(no=>DATA.indexOf(partOf(no))===activePart);
+    }
+    g.classList.toggle('dim',dim);
+  });
+  edges.forEach((e,i)=>{
+    const dim=activePart>=0 && (e.a.kind==='ch'?e.a.part:DATA.indexOf(partOf(e.a.ref.link[0])))!==activePart
+                              && (e.b.kind==='ch'?e.b.part:DATA.indexOf(partOf(e.b.ref.link[0])))!==activePart;
+    edgeEls[i].classList.toggle('dim',dim);
+  });
+  renderPills();
+}
+
+// —— 搜索定位 ——
+document.getElementById('search').addEventListener('keydown',e=>{
+  if(e.key!=='Enter')return;
+  const q=e.target.value.trim().toLowerCase(); if(!q)return;
+  const c=DATA.flatMap(p=>p.chapters).find(c=>c.title.toLowerCase().includes(q)||c.ability.includes(q)||
+    c.concepts.some(x=>x.toLowerCase().includes(q))||c.pages.some(p=>p[1].toLowerCase().includes(q)));
+  if(c){ select(c.no); centerOn('c'+c.no); }
+  else{ const k=CONCEPTS.find(k=>k.t.toLowerCase().includes(q)); if(k){ selectConcept(nodeById(k.id)); centerOn(k.id); } }
+});
+function centerOn(id){
+  const n=nodeById(id);
+  vtx=box.clientWidth/2-n.x*vk; vty=box.clientHeight/2-n.y*vk; applyView();
+  const pl=document.getElementById('pulse-'+id); pl.classList.remove('run'); void pl.getBBox; pl.classList.add('run');
+}
+
+// ==================== 详情面板 ====================
+const detailEl=document.getElementById('detail');
+let selectedNo=-1;
+function select(no){
+  selectedNo=no;
+  nodeEls.forEach(({g,n})=>g.classList.toggle('sel',n.kind==='ch'&&n.no===no));
+  const c=chByNo[no], nexts=nextOf(no);
+  detailEl.innerHTML=`
+    <h3>${c.emoji} 第 ${c.no} 章 · ${c.title}</h3>
+    <div class="a-sub">${c.ability?'能力：'+c.ability+' ｜ ':''}难度 ${stars(c.diff)}${c.hub?' ｜ ★ 全书枢纽':''}</div>
+    <div class="a-desc">${c.desc}</div>
+    <div class="a-concepts">${c.concepts.map(x=>`<span>${x}</span>`).join('')}</div>
+    <div class="a-sec">📄 页面清单（点击直达）</div>
+    <div class="a-list">${c.pages.map(p=>`<a href="${c.dir}/${p[0]}" target="_blank"><span>${p[1]}</span><span class="st">${stars(p[2])}</span></a>`).join('')}</div>
+    <div class="a-sec">⬅️ 前置章节</div>
+    <div class="a-list">${c.prereq.length?c.prereq.map(n=>`<a href="javascript:centerOn('c${n}');select(${n})"><span>${chByNo[n].emoji} 第 ${n} 章 · ${chByNo[n].title}</span></a>`).join(''):'<div class="a-sub">无，起点章节</div>'}</div>
+    <div class="a-sec">➡️ 后续章节</div>
+    <div class="a-list">${nexts.length?nexts.map(n=>`<a href="javascript:centerOn('c${n}');select(${n})"><span>${chByNo[n].emoji} 第 ${n} 章 · ${chByNo[n].title}</span></a>`).join(''):'<div class="a-sub">收官方向</div>'}</div>`;
+}
+function selectConcept(n){
+  const k=n.ref;
+  detailEl.innerHTML=`
+    <h3>💡 ${k.t}</h3>
+    <div class="a-sub">关键概念 · 横跨多章的技术枢纽</div>
+    <div class="a-desc">${k.desc}</div>
+    <div class="a-sec">🔗 关联章节（点击定位）</div>
+    <div class="a-list">${k.link.map(no=>`<a href="javascript:centerOn('c${no}');select(${no})"><span>${chByNo[no].emoji} 第 ${no} 章 · ${chByNo[no].title}</span></a>`).join('')}</div>`;
+}
+
+// ==================== 清单视图 ====================
+const listView=document.getElementById('listView');
+let expandedNo=-1;
+function renderList(filter){
+  listView.innerHTML='';
+  DATA.forEach(part=>{
+    const chs=part.chapters.filter(c=>match(c,filter)); if(!chs.length)return;
+    const pi=DATA.indexOf(part), pc=PCOLORS[pi];
+    const sec=document.createElement('div'); sec.className='part2';
+    sec.innerHTML=`<div class="part2-head" style="--pc:${pc}"><h2 style="color:${pc}">${part.name}</h2><span class="tag">第 ${chs.map(c=>c.no).join('、')} 章</span></div>`;
+    const grid=document.createElement('div'); grid.className='cards';
+    chs.forEach(c=>grid.appendChild(cardOf(c,pc)));
+    sec.appendChild(grid); listView.appendChild(sec);
+  });
+  if(!listView.children.length) listView.innerHTML='<div style="color:#8b949e;padding:30px 10px">没有匹配的章节，换个关键词试试</div>';
+}
+function match(c,q){ if(!q)return true; q=q.toLowerCase();
+  return c.title.toLowerCase().includes(q)||c.ability.includes(q)||c.desc.toLowerCase().includes(q)||
+         c.concepts.some(x=>x.toLowerCase().includes(q))||c.pages.some(p=>p[1].toLowerCase().includes(q)); }
+function cardOf(c,color){
+  const el=document.createElement('div');
+  el.className='card'+(c.no===selectedNo?' sel':'')+(c.no===expandedNo?' open':'');
+  el.style.setProperty('--pc',color);
+  const chips=c.prereq.map(n=>`<span class="chip link" onclick="event.stopPropagation();select(${n})">前置·第${n}章</span>`).join('');
+  el.innerHTML=`
+    <div class="top"><span class="emoji">${c.emoji}</span><h3>第 ${c.no} 章 · ${c.title}</h3>${c.ability?`<span class="ability">${c.ability}</span>`:''}</div>
+    <div class="desc">${c.desc}</div>
+    <div class="meta"><span>${stars(c.diff)}</span>${chips}<span class="toggle" style="margin-left:auto">${c.no===expandedNo?'收起 ▴':'展开页面 ▾'}（${c.pages.length} 页）</span></div>
+    <div class="pages"><ul>${c.pages.map(p=>`<li><a href="${c.dir}/${p[0]}" target="_blank">${p[1]}</a><span class="st">${stars(p[2])}</span><span class="pf">${p[0]==='README.md'?'导览':p[0].startsWith('99')?'收官':'正文'}</span></li>`).join('')}</ul></div>`;
+  el.onclick=()=>{ expandedNo=(expandedNo===c.no)?-1:c.no; renderList(document.getElementById('search').value.trim()); select(c.no); };
+  return el;
+}
+
+// ==================== pills / 模式切换 / 启动 ====================
+const pillsEl=document.getElementById('partPills');
+function renderPills(){
+  pillsEl.innerHTML='';
+  DATA.forEach((p,i)=>{
+    const b=document.createElement('button');
+    b.className='pill'+(activePart===i?' on':''); b.style.setProperty('--pc',PCOLORS[i]);
+    b.innerHTML=`<b style="color:${PCOLORS[i]}">${p.name.split(' · ')[0]}</b> ${p.name.split(' · ')[1]}`;
+    b.title=p.name;
+    b.onclick=()=>filterPart(i);
+    pillsEl.appendChild(b);
+  });
+}
+const mG=document.getElementById('mGraph'), mL=document.getElementById('mList');
+mG.onclick=()=>{ mG.classList.add('on'); mL.classList.remove('on'); box.style.display='block'; listView.style.display='none'; };
+mL.onclick=()=>{ mL.classList.add('on'); mG.classList.remove('on'); box.style.display='none'; listView.style.display='block'; renderList(document.getElementById('search').value.trim()); };
+document.getElementById('search').oninput=e=>{ if(listView.style.display!=='none') renderList(e.target.value.trim()); };
+
+renderPills(); applyView();
+setTimeout(()=>document.getElementById('zfit').click(),600);   // 布局稳定后自动适配视野
+</script>
+</body>
+</html>

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎮 AI 模型知识树 · 交互实验场</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0d1117; color: #e6edf3; font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 40px 20px;
+  }
+  h1 { font-size: 28px; margin-bottom: 8px; }
+  .sub { color: #8b949e; margin-bottom: 36px; font-size: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 380px)); gap: 24px; max-width: 860px; width: 100%; }
+  a.card {
+    display: block; background: #161b22; border: 1px solid #30363d; border-radius: 12px;
+    padding: 24px; text-decoration: none; color: #e6edf3; transition: transform .15s, border-color .15s;
+  }
+  a.card:hover { transform: translateY(-3px); border-color: #58a6ff; }
+  .card h2 { font-size: 18px; margin: 10px 0 8px; }
+  .card p { color: #8b949e; font-size: 13px; line-height: 1.7; }
+  .emoji { font-size: 32px; }
+  .footer { margin-top: 40px; color: #8b949e; font-size: 12px; text-align: center; line-height: 1.8; }
+  .footer a { color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+  <h1>🎮 交互实验场</h1>
+  <div class="sub">AI 模型知识树的配套动手实验 · 本地双击即可玩，无需安装任何东西</div>
+
+  <div class="grid">
+    <a class="card" href="./knowledge-tree.html" style="grid-column: 1 / -1;">
+      <div class="emoji">🌳</div>
+      <h2>交互式知识树</h2>
+      <p>全书总览入口：力导向动态图（Neo4j 风格——节点可拖拽甩动、物理回弹、悬停聚焦依赖链、缩放平移、按篇筛选、搜索定位）+ 章节清单双视图；图中的小节点是横跨多章的关键概念（向量 / 注意力 / 双塔 / RLHF…），点击章节点直达 Markdown 页面。</p>
+      <p style="margin-top:8px;color:#f778ba;">★ 推荐从这里开始逛整个知识库</p>
+    </a>
+    <a class="card" href="./gradient-descent.html">
+      <div class="emoji">🔥</div>
+      <h2>梯度下降炼丹炉</h2>
+      <p>拖动学习率与动量，亲眼看小球如何下山、动量如何帮它跨过小坑，以及步子太大时怎么直接飞出山谷。可切换 SGD / Momentum / Adam 三种优化器对比收敛速度。</p>
+      <p style="margin-top:8px;color:#58a6ff;">对应章节 → 第 2 章 数学基础 · 第 4 章 深度学习基础</p>
+    </a>
+    <a class="card" href="./attention.html">
+      <div class="emoji">👀</div>
+      <h2>注意力热力图</h2>
+      <p>输入任意一句话，看每个词在"关注"谁：注意力权重热力图实时计算 softmax(QKᵀ/√d)，点击任意词查看它对其他词的注意力分配条形图。</p>
+      <p style="margin-top:8px;color:#58a6ff;">对应章节 → 第 7 章 Transformer 与注意力机制</p>
+    </a>
+  </div>
+
+  <div class="footer">
+    后续实验（规划中）：扩散去噪可视化 · 卷积核滑动演示<br>
+    返回知识库：打开仓库根目录的 README.md 即可 · 实验均为单文件 HTML，可离线使用
+  </div>
+</body>
+</html>
