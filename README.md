@@ -232,6 +232,7 @@ git clone https://github.com/lizhengzhong20-sketch/model_learning.git
 
 - [x] 五篇十三章框架 + 50+ 页正文（见上方目录）
 - [x] 全局知识树、阅读路线、每章生产实战收官页
+- [x] v0.2 全库深度化：每页机制四层递进（直觉→数学→成立条件→失效边界）+ 完整推导折叠 + 失败模式分析（13k → 21k+ 行）
 - [x] 统一写作模板、扩展机制与贡献流程
 
 **Backlog**（欢迎认领，详见 [CHANGELOG](./CHANGELOG.md)）
