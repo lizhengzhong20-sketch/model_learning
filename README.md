@@ -245,7 +245,7 @@ git clone https://github.com/lizhengzhong20-sketch/model_learning.git
 
 - [x] 全库术语表 [GLOSSARY.md](./GLOSSARY.md)（初版上线：中英对照 + 一句话解释，持续扩充）
 - [ ] 各章配套 Jupyter 实战 notebook（生成中，见 [notebooks/](./notebooks/README.md)）
-- [ ] 经典论文精读专栏（Attention is All You Need 等，见 [papers/](./papers/README.md)，逐篇上线）
+- [x] 经典论文精读专栏 15 篇全部上线（Attention is All You Need / ResNet / Adam / word2vec / BERT / GPT-3 / InstructGPT / DPO / LoRA / GAN / DDPM / CLIP / GCN / DQN+PPO / XGBoost，见 [papers/](./papers/README.md)）
 - [x] playground 新实验：扩散去噪、卷积核滑动的可视化
 - [ ] 英文版（en/ 目录）
 

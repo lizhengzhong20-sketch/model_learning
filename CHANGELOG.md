@@ -2,6 +2,28 @@
 
 本项目的所有重要变更都记录在此。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.4.2] - 2026-09-25
+
+### 新增（论文精读专栏 01–04 篇）
+
+- [papers/](papers/README.md) 专栏补齐第 01~04 篇精读（每篇 400 行上下，统一结构：速览表 → 一句话核心思想 → 方法精读（完整推导 + 论文/本书记号翻译表 + 折叠不跳步 + 自绘 mermaid/ASCII）→ 实验解读（证明/没证明/消融读法，公开可查数字）→ 后世影响与争议 → 在库位置与前后导航 + 真实 arXiv 延伸阅读；推导全部自写重写、原文图表不搬运）：
+  - [01 · Attention Is All You Need](papers/01-Attention-Is-All-You-Need.md)（复杂度表 Table 1 逐格推导与三情况算例、Noam warmup 调度交点/峰值手算、Table 2 成本口径与 41.8/41.0 内部出入标注、消融五条读法）
+  - [02 · ResNet](papers/02-ResNet.md)（残差梯度 +1 项完整链与 2^L 路径展开、退化问题三条排除论证 + BN/ReLU 学恒等不可行的结构分析、A/B/C 捷径与瓶颈块参数账、3.57% 的口径读法、ResNet-50 架构表逐行）
+  - [03 · Adam](papers/03-Adam.md)（信噪比步长与第一步 sign 更新、偏差校正几何权重推导与 31.6 倍失控账、动量方差缩减 (1−β)/(1+β) 推导、凸后悔度框架与 AMSGrad 反例、AdaGrad 冻死算例、AdamW 耦合一行看懂）
+  - [04 · word2vec](papers/04-word2vec.md)（加速账与输出层五个数量级削减、SGNS 目标/梯度/一维手算、高频降采样公式、层次 softmax 霍夫曼树手算、类比评测协议与自建测试集边界、king−man+woman≈queen 的出处辨析）
+- 专栏 [README](papers/README.md)：01–04 状态标 ✅ 并挂精读链接；全部 15 篇上线，专栏完结；根 [README](README.md) Backlog 勾选论文专栏条目
+
+## [0.4.1] - 2026-09-25
+
+### 新增（论文精读专栏首批 4 篇）
+
+- [papers/](papers/README.md) 专栏上线第 05~08 篇精读（每篇 400+ 行，统一结构：速览表 → 一句话核心思想 → 方法精读（完整推导 + 记号翻译表 + 折叠不跳步 + 自绘 mermaid）→ 实验解读（证明/没证明/消融读法，公开可查数字）→ 后世影响与争议 → 在库位置与前后导航；推导全部自写重写、原文图表不搬运）：
+  - [05 · BERT](papers/05-BERT.md)（MLM 伪似然与 80/10/10 期望分析、NSP、GLUE 80.5 / SQuAD 90.9 的读法、RoBERTa 证伪与三种自监督目标对照）
+  - [06 · GPT-3](papers/06-GPT-3.md)（自回归似然与 PPL 换算、ICL = 拼接条件续写的恒等式推导、幂律与 Chinchilla 配比修正、few-shot 71.8 vs 微调 89.8 的两范式定位）
+  - [07 · InstructGPT](papers/07-InstructGPT.md)（SFT/RM/PPO 三阶段全流程、Bradley-Terry 排序损失与 C(K,2) 推导、PPO 完整目标逐项拆解 + KL 逐 token 折叠等价 + 闭式最优解、1.3B 胜 175B 的正确读法）
+  - [08 · DPO](papers/08-DPO.md)（RLHF 目标 → 闭式最优策略 → 反解奖励 → Z 相消 → 极大似然六步完整推导链、梯度解剖与动态课程、β 双重身份与极限、离线覆盖边界与争议）
+- 专栏 [README](papers/README.md) 状态表更新：05–08 标记 ✅ 并挂精读链接
+
 ## [0.4.0] - 2026-09-25
 
 ### 新增（审计修复 + 实战 notebook + 内容缺口补全）
