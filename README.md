@@ -180,7 +180,9 @@ graph LR
 
 **方式一：直接在线阅读**（零配置）——从上方目录点进任何一章，图表在 GitHub 上原生渲染。
 
-**方式二：克隆到本地**：
+**方式二：文档站点**（启用 GitHub Pages 后自动生效）——推送 main 分支会自动构建并部署到 `https://lizhengzhong20-sketch.github.io/model_learning/`：全文搜索、深浅色切换、**playground 在线可玩**（本地构建：`pip install mkdocs-material && python tools/build_site.py`，在仓库 Settings → Pages 选择 "GitHub Actions" 即可开启）。
+
+**方式三：克隆到本地**：
 
 ```bash
 git clone https://github.com/lizhengzhong20-sketch/model_learning.git
