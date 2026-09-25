@@ -34,7 +34,7 @@ def variants(path: str):
         yield "/".join([".."] * k + rest)
 
 
-def main(fix: bool):
+def main(fix: bool, ci: bool = False):
     total = broken = fixed = 0
     report = []
     for md in sorted(ROOT.rglob("*.md")):
@@ -43,6 +43,9 @@ def main(fix: bool):
         # 自动修复仅作用于 docs/ 下的内容文件；
         # 根目录与 templates/ 中的链接多为"规范示例"（展示给页面层用的正确写法），只报告不改写
         in_scope = md.relative_to(ROOT).parts[0] == "docs"
+        # --ci 模式：只把 docs/ 的死链计入退出码（模板占位符与规范示例不算失败）
+        if ci and not in_scope:
+            continue
         text = md.read_text(encoding="utf-8")
         orig = text
         for m in LINK_RE.finditer(text):
@@ -82,4 +85,4 @@ def main(fix: bool):
 
 
 if __name__ == "__main__":
-    sys.exit(main(fix="--fix" in sys.argv))
+    sys.exit(main(fix="--fix" in sys.argv, ci="--ci" in sys.argv))

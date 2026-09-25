@@ -7,7 +7,7 @@
 ## 📁 项目结构（篇 → 章 → 节）
 
 ```
-model_learing/
+model_learning/
 ├── README.md                  # 总目录：编排逻辑、知识树、章节导航
 ├── ROADMAP.md                 # 知识地图与阅读路线
 ├── CONTRIBUTING.md            # 本文件：维护规范 + 扩展机制
@@ -137,7 +137,7 @@ GitHub 原生渲染以下图型，按内容选最合适的（示例可直接复�
 ## 🎮 playground 交互实验场规范
 
 - 每个实验 = **单个自包含 HTML 文件**（内联 CSS/JS，零依赖、零构建），克隆后**本地双击即可打开**；启用 GitHub Pages 可在线访问。
-- 新增实验：`playground/NN-实验名.html`，并在 `playground/index.html` 登记入口。
+- 新增实验：`playground/实验名.html`（描述性文件名即可，如 `conv.html`），并在 `playground/index.html` 登记入口。
 - 页面要求：中文 UI、可交互（滑块/输入）、视觉直观、代码注释中文。
 - 在正文页相应位置链接实验：`> 🎮 动手玩：[梯度下降炼丹炉](../../../playground/gradient-descent.html)`
 

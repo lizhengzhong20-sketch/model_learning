@@ -294,7 +294,8 @@ class ToyDataset(Dataset):
     def __getitem__(self, idx):
         return self.X[idx], self.y[idx]
 
-loader = DataLoader(ToyDataset(), batch_size=16, shuffle=True)
+ds = ToyDataset()                            # 数据只造一份——两次 ToyDataset() 会生成两份不同随机数据
+loader = DataLoader(ds, batch_size=16, shuffle=True)
 print("batch 数:", len(loader))               # 预期 7（100/16 向上取整）
 
 # ---------- 4. 四步模板的完整训练（结构同上一页） ----------
@@ -311,7 +312,7 @@ for epoch in range(30):
 # ---------- 5. 评估（两件套缺一不可） ----------
 model.eval()
 with torch.no_grad():
-    acc = ((model(ToyDataset().X) > 0).float() == ToyDataset().y).float().mean()
+    acc = ((model(ds.X) > 0).float() == ds.y).float().mean()   # 评估必须用训练用的同一份数据
 print("准确率:", round(acc.item(), 3))         # 预期 0.9x（30 轮基本学会）
 
 # ---------- 6. 保存与加载（state_dict 路线） ----------

@@ -4,7 +4,7 @@
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
 ![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)
-![Chapters](https://img.shields.io/badge/结构-五篇%20·%2013%20章%20·%2050%2B%20页-blue.svg)
+![Chapters](https://img.shields.io/badge/结构-五篇%20·%2013%20章%20·%2080%2B%20页-blue.svg)
 ![Status](https://img.shields.io/badge/状态-持续更新中-orange.svg)
 ![GitHub Stars](https://img.shields.io/github/stars/lizhengzhong20-sketch/model_learning?style=social)
 ![GitHub Forks](https://img.shields.io/github/forks/lizhengzhong20-sketch/model_learning?style=social)
@@ -21,7 +21,7 @@
 
 | 维度 | 内容 |
 |------|------|
-| **结构** | 五篇 · 十三章 · 50+ 页：起步准备 → 经典机器学习 → 深度学习 → 七大专业方向（视觉 / 时序 / NLP 与 LLM / 推荐 / 图 / 强化学习 / 因果）→ 前沿与融合 |
+| **结构** | 五篇 · 十三章 · 80+ 页：起步准备 → 经典机器学习 → 深度学习 → 七大专业方向（视觉 / 时序 / NLP 与 LLM / 推荐 / 图 / 强化学习 / 因果）→ 前沿与融合 |
 | **每一页** | 七步结构：解决什么问题 → 通俗类比 → 📋 带数字的例子 → 图解原理（每个公式配一句"人话"）→ 能跑的代码 → 误区与折叠自测 |
 | **每一章** | 收官一页「**生产实战**」：真实项目 0→1 的数据 / 算力 / 算法选型、场景选型表、真实工具链与踩坑实录 |
 | **交互** | 🎮 交互实验场：交互式知识树、梯度下降炼丹炉、注意力热力图——本地双击即玩 |
@@ -132,7 +132,7 @@ graph LR
     CV --> MM
 ```
 
-**怎么读这棵树**：箭头方向 = 依赖方向；**第四篇七个方向相互独立**，按需选读；**因果推断是横切方法论**；**Transformer 与向量表示（embedding）是两大枢纽**——前者通往 LLM / 现代时序 / 视觉前沿，后者串起词向量 → 双塔召回 → RAG 检索 → 多模态对整条线。
+**怎么读这棵树**：箭头方向 = 依赖方向；**第四篇七个方向大致平行、可按需选读**——但视觉前沿（ViT）、现代时序、推荐与图的多处内容会用到第 7 章的 Transformer，具体依赖见各页顶部"前置知识"；**因果推断是横切方法论**；**Transformer 与向量表示（embedding）是两大枢纽**——前者通往 LLM / 现代时序 / 视觉前沿，后者串起词向量 → 双塔召回 → RAG 检索 → 多模态对整条线（图中 RNN/Transformer 作为通用机制画在第三篇地基层，详细页面见第 6/7 章）。
 
 ## 📚 目录
 
@@ -240,10 +240,10 @@ git clone https://github.com/lizhengzhong20-sketch/model_learning.git
 
 **Backlog**（欢迎认领，详见 [CHANGELOG](./CHANGELOG.md)）
 
-- [ ] 全库术语表 GLOSSARY.md（中英对照 + 一句话解释）
-- [ ] 各章配套 Jupyter 实战 notebook
-- [ ] 经典论文精读专栏（Attention is All You Need 等）
-- [ ] playground 新实验：扩散去噪、卷积核滑动的可视化
+- [x] 全库术语表 [GLOSSARY.md](./GLOSSARY.md)（初版上线：中英对照 + 一句话解释，持续扩充）
+- [ ] 各章配套 Jupyter 实战 notebook（生成中，见 [notebooks/](./notebooks/README.md)）
+- [ ] 经典论文精读专栏（Attention is All You Need 等，见 [papers/](./papers/README.md)，逐篇上线）
+- [x] playground 新实验：扩散去噪、卷积核滑动的可视化
 - [ ] 英文版（en/ 目录）
 
 ## 🤝 贡献与致谢
@@ -260,4 +260,7 @@ git clone https://github.com/lizhengzhong20-sketch/model_learning.git
 
 ## 📄 许可
 
-[MIT](./LICENSE) © 2026 model_learning contributors
+- **代码**（tools / playground / 正文代码）：[MIT](./LICENSE)
+- **文字与图表内容**（docs 等）：[CC BY-SA 4.0](./LICENSE-CONTENT)（署名-相同方式共享；引用请附仓库链接）
+
+© 2026 model_learning contributors
