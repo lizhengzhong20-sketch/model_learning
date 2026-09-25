@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🔬 卷积核滑动可视化</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#0d1117; color:#e6edf3; font-family:"Microsoft YaHei","PingFang SC",sans-serif; padding:20px; }
+  .wrap { max-width:1240px; margin:0 auto; }
+  h1 { font-size:22px; margin-bottom:4px; }
+  .sub { color:#8b949e; font-size:13px; margin-bottom:14px; line-height:1.7; }
+  .layout { display:flex; gap:14px; flex-wrap:wrap; align-items:flex-start; }
+  canvas.img { background:#161b22; border:1px solid #30363d; border-radius:10px; width:100%; }
+  .col { flex:1 1 300px; }
+  .panel { background:#161b22; border:1px solid #30363d; border-radius:10px; padding:12px 14px; margin-top:12px; }
+  .row { display:flex; align-items:center; gap:10px; margin:8px 0; flex-wrap:wrap; }
+  label { font-size:13px; color:#8b949e; min-width:60px; }
+  select, button { background:#21262d; color:#e6edf3; border:1px solid #30363d; border-radius:6px; padding:6px 12px; font-size:13px; cursor:pointer; }
+  button:hover { border-color:#58a6ff; }
+  input[type=range] { flex:1; min-width:90px; accent-color:#58a6ff; }
+  .val { color:#58a6ff; font-family:Consolas,monospace; font-size:12px; }
+  .caption { text-align:center; color:#8b949e; font-size:13px; margin-top:6px; }
+  table.k { border-collapse:collapse; margin:0 auto; }
+  table.k td { border:1px solid #30363d; width:44px; height:36px; text-align:center; }
+  table.k input { width:40px; background:#0d1117; color:#e6edf3; border:none; text-align:center; font-family:Consolas,monospace; font-size:14px; }
+  table.win td { border:1px solid #30363d; width:40px; height:32px; text-align:center; font-family:Consolas,monospace; font-size:13px; color:#e6edf3; }
+  table.win td.hot { background:#1f6feb33; border-color:#58a6ff; }
+  .winbox { position:relative; }
+  .win-highlight { position:absolute; border:2px solid #f778ba; pointer-events:none; display:none; }
+  .note { color:#8b949e; font-size:12px; line-height:1.8; margin-top:8px; }
+  .arrow { text-align:center; color:#58a6ff; font-size:24px; align-self:center; flex:0 0 auto; padding:0 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🔬 卷积核滑动可视化</h1>
+  <div class="sub">看着 3×3 卷积核一格一格滑过图像：左图是输入（粉色框=当前窗口），中间是核（可编辑），右侧特征图逐像素生成（粉色=当前输出）。同一个图 × 不同的核 = 提取不同的特征（边缘 / 纹理 / 锐化）。</div>
+
+  <div class="layout">
+    <div class="col">
+      <div class="winbox">
+        <canvas id="src" class="img" width="300" height="300"></canvas>
+        <div class="win-highlight" id="hl"></div>
+      </div>
+      <div class="caption">输入图像（滑窗进行中）</div>
+      <div class="panel">
+        <div class="row">
+          <label>图像</label>
+          <select id="pattern">
+            <option value="shapes">几何图形</option>
+            <option value="stripes">斜纹</option>
+            <option value="checker">棋盘格</option>
+            <option value="grad">径向渐变</option>
+          </select>
+          <button id="btnUpload">📁 上传图片</button>
+          <input type="file" id="file" accept="image/*" style="display:none">
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow">→</div>
+
+    <div class="col" style="flex:0 1 230px;">
+      <div class="panel" style="margin-top:0;">
+        <div class="row" style="justify-content:center;">
+          <select id="preset">
+            <option value="sobelx">Sobel 纵向边缘</option>
+            <option value="sobely">Sobel 横向边缘</option>
+            <option value="sharpen">锐化</option>
+            <option value="blur">高斯模糊</option>
+            <option value="laplacian">拉普拉斯（全向边缘）</option>
+            <option value="emboss">浮雕</option>
+            <option value="custom">自定义</option>
+          </select>
+        </div>
+        <table class="k" id="kgrid"></table>
+        <div class="caption" id="kdesc">核权重（可直接编辑）</div>
+      </div>
+      <div class="panel">
+        <div style="font-size:13px;color:#8b949e;margin-bottom:6px;text-align:center;">当前窗口像素值</div>
+        <table class="win" id="wingrid"></table>
+        <div class="note" style="text-align:center;">
+          输出 = Σ(窗口 × 核) <span id="wsum"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow">→</div>
+
+    <div class="col">
+      <canvas id="out" class="img" width="300" height="300"></canvas>
+      <div class="caption">输出特征图（实时生成）</div>
+      <div class="panel">
+        <div class="row">
+          <button id="btnPlay">⏸ 暂停</button>
+          <button id="btnStep">单步</button>
+          <button id="btnAll">⏭ 一次算完</button>
+          <button id="btnRe">↺ 重来</button>
+        </div>
+        <div class="row">
+          <label>速度</label>
+          <input type="range" id="speed" min="1" max="10" value="6">
+          <span class="val" id="speedVal">6</span>
+          <span class="val" id="prog" style="margin-left:auto;">0%</span>
+        </div>
+        <div class="note">
+          💡 试着换不同核对比输出：Sobel 纵向只亮出竖线、横向只亮横线、拉普拉斯亮出全部轮廓、模糊抹平一切。CNN 的第一层就是几十个这样的核同时滑动（第 5 章《CNN》）。
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==================== 输入图像 ====================
+const S = 100;                       // 逻辑分辨率 100×100，显示放大 3×
+const srcCv = document.getElementById('src'), srcCtx = srcCv.getContext('2d');
+const outCv = document.getElementById('out'), outCtx = outCv.getContext('2d');
+let IMG = new Float32Array(S * S);   // 灰度 0~255
+
+function genPattern(kind) {
+  const off = document.createElement('canvas'); off.width = off.height = S;
+  const g = off.getContext('2d');
+  g.fillStyle = '#000'; g.fillRect(0, 0, S, S);
+  if (kind === 'shapes') {
+    g.fillStyle = '#fff';
+    g.beginPath(); g.arc(32, 35, 22, 0, 7); g.fill();          // 圆
+    g.fillRect(52, 52, 34, 30);                                  // 方
+    g.beginPath(); g.moveTo(10, 88); g.lineTo(45, 60); g.lineTo(48, 90); g.fill(); // 三角
+  } else if (kind === 'stripes') {
+    for (let i = -S; i < S * 2; i += 10) { g.fillStyle = '#fff'; g.save(); g.translate(i, 0); g.rotate(0.6); g.fillRect(0, -S, 4, S * 3); g.restore(); }
+  } else if (kind === 'checker') {
+    for (let y = 0; y < S; y += 10) for (let x = 0; x < S; x += 10) { g.fillStyle = ((x + y) / 10) % 2 ? '#fff' : '#000'; g.fillRect(x, y, 10, 10); }
+  } else {
+    const rg = g.createRadialGradient(50, 50, 4, 50, 50, 60);
+    rg.addColorStop(0, '#fff'); rg.addColorStop(1, '#000'); g.fillStyle = rg; g.fillRect(0, 0, S, S);
+  }
+  loadFromCanvas(off);
+}
+function loadFromCanvas(c) {
+  const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+  IMG = new Float32Array(S * S);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const i = (Math.min(c.height - 1, Math.round(y * c.height / S)) * c.width + Math.min(c.width - 1, Math.round(x * c.width / S))) * 4;
+    IMG[y * S + x] = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+  }
+  resetScan();
+}
+
+// ==================== 卷积核 ====================
+const PRESETS = {
+  sobelx:   { k: [-1,0,1,-2,0,2,-1,0,1], d: '纵向边缘检测：左右差分' },
+  sobely:   { k: [-1,-2,-1,0,0,0,1,2,1], d: '横向边缘检测：上下差分' },
+  sharpen:  { k: [0,-1,0,-1,5,-1,0,-1,0], d: '锐化：中心加强、邻域压低' },
+  blur:     { k: [1,2,1,2,4,2,1,2,1],     d: '高斯模糊：邻域加权平均' },
+  laplacian:{ k: [0,1,0,1,-4,1,0,1,0],   d: '拉普拉斯：全方向边缘' },
+  emboss:   { k: [-2,-1,0,-1,1,1,0,1,2], d: '浮雕：差分 + 偏移' },
+  custom:   { k: [0,0,0,0,1,0,0,0,0],    d: '自定义：随便改' },
+};
+let K = PRESETS.sobelx.k.slice();
+
+const kgrid = document.getElementById('kgrid');
+function buildKGrid() {
+  kgrid.innerHTML = '';
+  K.forEach((v, i) => {
+    const td = document.createElement('td');
+    const inp = document.createElement('input');
+    inp.value = v; inp.id = 'k' + i;
+    inp.onchange = () => { K[i] = parseFloat(inp.value) || 0; document.getElementById('preset').value = 'custom'; resetScan(); };
+    td.appendChild(inp); kgrid.appendChild(td);
+  });
+}
+document.getElementById('preset').onchange = e => {
+  const p = PRESETS[e.target.value];
+  K = p.k.slice(); buildKGrid();
+  document.getElementById('kdesc').textContent = p.d;
+  resetScan();
+};
+
+// ==================== 滑动扫描 ====================
+let pos = 0, running = true, outData;
+const wingrid = document.getElementById('wingrid');
+
+function resetScan() {
+  pos = 0; running = true;
+  outData = new Float32Array((S - 2) * (S - 2));
+  let mn = Infinity, mx = -Infinity;
+  for (let y = 1; y < S - 1; y++) for (let x = 1; x < S - 1; x++) {
+    let s = 0;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) s += IMG[(y + dy) * S + x + dx] * K[(dy + 1) * 3 + dx + 1];
+    outData[(y - 1) * (S - 2) + (x - 1)] = s;
+    mn = Math.min(mn, s); mx = Math.max(mx, s);
+  }
+  scanMin = mn; scanMax = mx; outData.fill(NaN);   // 逐格重新生成
+  outCtx.fillStyle = '#0d1117'; outCtx.fillRect(0, 0, 300, 300);
+  drawSrc(); buildWin();
+}
+let scanMin = 0, scanMax = 1;
+
+function drawSrc(px, py) {
+  srcCtx.imageSmoothingEnabled = false;
+  const off = document.createElement('canvas'); off.width = off.height = S;
+  const id = off.getContext('2d').createImageData(S, S);
+  for (let i = 0; i < S * S; i++) { const v = IMG[i]; id.data[i * 4] = id.data[i * 4 + 1] = id.data[i * 4 + 2] = v; id.data[i * 4 + 3] = 255; }
+  off.getContext('2d').putImageData(id, 0, 0);
+  srcCtx.drawImage(off, 0, 0, 300, 300);
+  const hl = document.getElementById('hl');
+  if (px !== undefined) {
+    hl.style.display = 'block';
+    hl.style.left = ((px - 1) / S * 300) + 'px';
+    hl.style.top  = ((py - 1) / S * 300) + 'px';
+    hl.style.width  = (3 / S * 300) + 'px';
+    hl.style.height = (3 / S * 300) + 'px';
+  } else hl.style.display = 'none';
+}
+
+function convAt(x, y) {
+  let s = 0;
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) s += IMG[(y + dy) * S + x + dx] * K[(dy + 1) * 3 + dx + 1];
+  return s;
+}
+
+function buildWin(px, py) {
+  wingrid.innerHTML = '';
+  let s = 0, cells = [];
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    const v = IMG[(py + dy) * S + px + dx];
+    const w = K[(dy + 1) * 3 + dx + 1];
+    s += v * w; cells.push({ v, w });
+  }
+  cells.forEach((c, i) => {
+    const td = document.createElement('td');
+    td.textContent = Math.round(c.v);
+    if (i === 4) td.className = 'hot';
+    wingrid.appendChild(td);
+  });
+  document.getElementById('wsum').textContent = '→ ' + s.toFixed(0);
+}
+
+function stepOnce() {
+  if (pos >= (S - 2) * (S - 2)) { running = false; return; }
+  const ox = pos % (S - 2), oy = (pos / (S - 2)) | 0;
+  const x = ox + 1, y = oy + 1;
+  const v = convAt(x, y);
+  const t = (v - scanMin) / (scanMax - scanMin || 1);
+  outCtx.fillStyle = `rgb(${Math.round(t * 255)},${Math.round(t * 255)},${Math.round(t * 255)})`;
+  outCtx.fillRect(ox / (S - 2) * 300, oy / (S - 2) * 300, 300 / (S - 2) + 0.5, 300 / (S - 2) + 0.5);
+  drawSrc(x, y); buildWin(x, y);
+  document.getElementById('prog').textContent = Math.round((pos + 1) / ((S - 2) * (S - 2)) * 100) + '%';
+  pos++;
+}
+
+// 预扫一遍求 min/max（用于显示归一化）
+let pre = null;
+function prescan() {
+  let mn = Infinity, mx = -Infinity;
+  for (let y = 1; y < S - 1; y++) for (let x = 1; x < S - 1; x++) {
+    const v = convAt(x, y); mn = Math.min(mn, v); mx = Math.max(mx, v);
+  }
+  return [mn, mx];
+}
+
+function loop() {
+  if (running) {
+    const sp = parseInt(document.getElementById('speed').value);
+    for (let i = 0; i < sp && running; i++) stepOnce();
+  }
+  setTimeout(() => requestAnimationFrame(loop), 30);
+}
+
+// ==================== 绑定 ====================
+document.getElementById('btnPlay').onclick = e => { running = !running; e.target.textContent = running ? '⏸ 暂停' : '▶ 继续'; };
+document.getElementById('btnStep').onclick = () => { running = false; document.getElementById('btnPlay').textContent = '▶ 继续'; stepOnce(); };
+document.getElementById('btnAll').onclick  = () => { while (pos < (S - 2) * (S - 2)) stepOnce(); running = false; };
+document.getElementById('btnRe').onclick   = () => { [scanMin, scanMax] = prescan(); resetScan(); running = true; };
+document.getElementById('speed').oninput   = e => document.getElementById('speedVal').textContent = e.target.value;
+document.getElementById('pattern').onchange= e => genPattern(e.target.value);
+document.getElementById('btnUpload').onclick = () => document.getElementById('file').click();
+document.getElementById('file').onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  const img = new Image();
+  img.onload = () => { const c = document.createElement('canvas'); c.width = c.height = S; const g = c.getContext('2d'); g.drawImage(img, 0, 0, S, S); loadFromCanvas(c); };
+  img.src = URL.createObjectURL(f);
+};
+
+// init
+K = PRESETS.sobelx.k.slice(); buildKGrid();
+document.getElementById('kdesc').textContent = PRESETS.sobelx.d;
+genPattern('shapes');
+[scanMin, scanMax] = prescan();
+resetScan();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🌀 扩散去噪实验室</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#0d1117; color:#e6edf3; font-family:"Microsoft YaHei","PingFang SC",sans-serif; padding:20px; }
+  .wrap { max-width:1200px; margin:0 auto; }
+  h1 { font-size:22px; margin-bottom:4px; }
+  .sub { color:#8b949e; font-size:13px; margin-bottom:14px; line-height:1.7; }
+  .layout { display:flex; gap:14px; flex-wrap:wrap; }
+  .main { flex:1 1 620px; }
+  .side { flex:1 1 320px; }
+  canvas { background:#161b22; border:1px solid #30363d; border-radius:10px; display:block; width:100%; }
+  .panel { background:#161b22; border:1px solid #30363d; border-radius:10px; padding:12px 14px; margin-bottom:12px; }
+  .row { display:flex; align-items:center; gap:10px; margin:8px 0; flex-wrap:wrap; }
+  label { font-size:13px; color:#8b949e; min-width:64px; }
+  .val { color:#58a6ff; font-family:Consolas,monospace; min-width:56px; }
+  input[type=range] { flex:1; min-width:110px; accent-color:#58a6ff; }
+  select, button { background:#21262d; color:#e6edf3; border:1px solid #30363d; border-radius:6px; padding:6px 14px; font-size:13px; cursor:pointer; }
+  button:hover { border-color:#58a6ff; }
+  .stats { font-family:Consolas,monospace; font-size:13px; color:#8b949e; line-height:1.9; }
+  .stats b { color:#e6edf3; }
+  .phase { font-size:13px; padding:3px 12px; border-radius:12px; border:1px solid #30363d; }
+  .phase.fwd { color:#f85149; border-color:#f85149; }
+  .phase.rev { color:#3fb950; border-color:#3fb950; }
+  .note { color:#8b949e; font-size:12px; line-height:1.8; margin-top:10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🌀 扩散去噪实验室</h1>
+  <div class="sub">前向：给数据点逐步撒噪声，直到变成纯高斯。反向：一步步"去噪"把分布雕刻回原形。本页的去噪步使用<b>已知高斯混合目标的解析后验均值（Tweedie 公式）</b>——数学上真实的 DDPM 反向过程；真实模型（如 Stable Diffusion）中这一步由神经网络承担。</div>
+
+  <div class="layout">
+    <div class="main">
+      <canvas id="cv" width="620" height="620"></canvas>
+      <div class="panel" style="margin-top:12px;">
+        <div class="row">
+          <span class="phase fwd" id="phaseTag">前向加噪</span>
+          <button id="btnFwd">▶ 演示前向（打碎）</button>
+          <button id="btnRev">▶ 演示反向（雕刻）</button>
+          <button id="btnReset">↺ 复位</button>
+        </div>
+        <div class="row">
+          <label>目标分布</label>
+          <select id="target">
+            <option value="three">三簇不等权</option>
+            <option value="ring">环上八簇（近似环形）</option>
+            <option value="two">双簇（方差悬殊）</option>
+          </select>
+        </div>
+        <div class="row">
+          <label>手动时间步 t</label>
+          <input type="range" id="tSlider" min="0" max="60" step="1" value="0">
+          <span class="val" id="tVal">0 / 60</span>
+        </div>
+        <div class="row">
+          <label>动画速度</label>
+          <input type="range" id="speed" min="1" max="10" step="1" value="4">
+          <span class="val" id="speedVal">4</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="panel">
+        <div class="stats">
+          状态 <b id="stPhase">数据分布 x₀</b><br>
+          时间步 t = <b id="stT">0</b> ｜ 噪声保留 ᾱ_t = <b id="stA">1.000</b><br>
+          含噪量 √(1-ᾱ_t) = <b id="stS">0.000</b>
+        </div>
+      </div>
+      <div class="panel">
+        <div style="font-size:13px;color:#8b949e;margin-bottom:8px;">📉 噪声调度 ᾱ_t（信号保留比例，越低越"碎"）</div>
+        <canvas id="sched" width="300" height="150"></canvas>
+      </div>
+      <div class="panel note">
+        💡 实验建议：<br>
+        1）点「演示前向」看三簇逐步融化成一片高斯；<br>
+        2）点「演示反向」看噪声如何被一步步"雕刻"回三簇——注意早期步最关键（大结构先成形）；<br>
+        3）拖动 t 滑块到中段再点反向，观察半成品如何恢复；<br>
+        4）换目标分布，体会"同一个去噪流程能雕刻任意分布"。<br><br>
+        📖 对应章节 → 第 12 章《扩散模型 Diffusion》
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==================== 目标分布（高斯混合，解析可算） ====================
+const TARGETS = {
+  three: [ {m:[-1.6,-1.2], s:0.30, w:0.5}, {m:[1.7,-1.0], s:0.45, w:0.3}, {m:[0.2,1.6], s:0.22, w:0.2} ],
+  ring:  Array.from({length:8}, (_,i) => { const a=i/8*2*Math.PI; return {m:[1.9*Math.cos(a),1.9*Math.sin(a)], s:0.18, w:1/8}; }),
+  two:   [ {m:[-1.4,0.6], s:0.18, w:0.6}, {m:[1.5,-0.6], s:0.65, w:0.4} ],
+};
+
+// ==================== 调度表（T=60，线性 β） ====================
+const T = 60, BETAS = [];
+for (let t = 0; t < T; t++) BETAS.push(1e-4 + (0.02 - 1e-4) * t / (T - 1));
+const ABAR = []; { let a = 1; for (const b of BETAS) { a *= (1 - b); ABAR.push(a); } }
+
+// ==================== 采样与去噪 ====================
+const N = 900;
+let pts = [];          // 当前点云 [x,y]
+let pts0 = [];         // 干净数据
+let ptsE = [];         // 每点固定的单位噪声方向（让手动拖 t 时点沿轨迹平滑移动，教学演示用）
+let means = TARGETS.three;
+
+function randn() { let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+
+function sampleData() {
+  means = TARGETS[document.getElementById('target').value];
+  const tot = means.reduce((s, c) => s + c.w, 0);
+  pts0 = []; ptsE = [];
+  for (let i = 0; i < N; i++) {
+    let r = Math.random() * tot, c = means[0];
+    for (const k of means) { if ((r -= k.w) <= 0) { c = k; break; } }
+    pts0.push([c.m[0] + c.s * randn(), c.m[1] + c.s * randn()]);
+    ptsE.push([randn(), randn()]);
+  }
+}
+
+// 前向：x_t = √ᾱ·x₀ + √(1-ᾱ)·ε（ε 用每点固定方向，便于拖动观察轨迹）
+function forwardTo(t) {
+  const a = ABAR[t], sa = Math.sqrt(a), ss = Math.sqrt(1 - a);
+  pts = pts0.map((p, i) => [sa * p[0] + ss * ptsE[i][0], sa * p[1] + ss * ptsE[i][1]]);
+}
+
+// 高斯混合在 x_t 处的对数密度梯度（解析 score）
+function logGrad(x) {
+  const a = ABAR[state.t], sa = Math.sqrt(a), var1 = 1 - a;
+  let lw = [], mx = [], my = [];
+  means.forEach(c => {
+    const dx = x[0] - sa * c.m[0], dy = x[1] - sa * c.m[1];
+    const d2 = dx * dx + dy * dy;
+    lw.push(Math.log(c.w) - d2 / (2 * var1));
+    mx.push(dx); my.push(dy);
+  });
+  const M = Math.max(...lw);
+  let Z = 0, r = means.map((_, i) => { const e = Math.exp(lw[i] - M); Z += e; return e; });
+  r = r.map(e => e / Z);
+  let gx = 0, gy = 0;
+  r.forEach((ri, i) => { gx += ri * (-mx[i] / var1); gy += ri * (-my[i] / var1); });
+  return [gx, gy];
+}
+
+// 反向 DDPM 一步：x_{t-1} = 1/√α·(x_t - β/√(1-ᾱ)·ε̂) + σz
+function reverseStep() {
+  const t = state.t; if (t <= 0) return false;
+  const a = ABAR[t], sa = Math.sqrt(a), ss = Math.sqrt(1 - a);
+  const beta = BETAS[t], alpha = 1 - beta, sqrtAlpha = Math.sqrt(alpha);
+  const sigma = Math.sqrt(beta * (1 - (t > 1 ? ABAR[t - 1] : 1)) / (1 - a)); // 后验方差近似
+  pts = pts.map(p => {
+    const [gx, gy] = logGrad(p);
+    const ex = -ss * gx, ey = -ss * gy;              // ε̂ = -√(1-ᾱ)·score
+    let nx = (p[0] - beta / ss * ex) / sqrtAlpha + sigma * randn();
+    let ny = (p[1] - beta / ss * ey) / sqrtAlpha + sigma * randn();
+    return [nx, ny];
+  });
+  state.t = t - 1;
+  return true;
+}
+
+// ==================== 状态与绘制 ====================
+const state = { t: 0, mode: 'idle' };   // mode: fwd | rev | idle
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+const sc = document.getElementById('sched'), sctx = sc.getContext('2d');
+
+const W2C = 620 / 2 / 3.2;   // 世界坐标 ±3.2 → 画布
+const toPx = (x, y) => [620 / 2 + x * W2C, 620 / 2 - y * W2C];
+
+function draw() {
+  ctx.fillStyle = '#0d1117'; ctx.fillRect(0, 0, 620, 620);
+  // 参考目标轮廓（各簇 2σ 圈）
+  ctx.strokeStyle = 'rgba(88,166,255,0.25)'; ctx.setLineDash([5, 5]); ctx.lineWidth = 1.5;
+  means.forEach(c => {
+    ctx.beginPath();
+    ctx.arc(...toPx(c.m[0], c.m[1]), c.s * 2 * W2C, 0, Math.PI * 2);
+    ctx.stroke();
+  });
+  ctx.setLineDash([]);
+  // 点云：颜色随噪声量从青→红
+  const noise = Math.sqrt(1 - ABAR[state.t]);
+  const hue = 190 - 190 * noise;
+  ctx.fillStyle = `hsl(${hue},85%,62%)`;
+  pts.forEach(p => { const [x, y] = toPx(p[0], p[1]); ctx.fillRect(x - 1.6, y - 1.6, 3.2, 3.2); });
+
+  document.getElementById('stT').textContent = state.t;
+  document.getElementById('stA').textContent = ABAR[state.t].toFixed(3);
+  document.getElementById('stS').textContent = noise.toFixed(3);
+  document.getElementById('stPhase').textContent = state.t === 0 ? '数据分布 x₀' : (state.t === T - 1 ? '≈ 纯噪声 x_T' : `含噪中间态 x_${state.t}`);
+  document.getElementById('tSlider').value = state.t;
+  document.getElementById('tVal').textContent = `${state.t} / ${T}`;
+  drawSched();
+}
+
+function drawSched() {
+  sctx.fillStyle = '#0d1117'; sctx.fillRect(0, 0, 300, 150);
+  sctx.strokeStyle = '#30363d';
+  sctx.beginPath(); sctx.moveTo(30, 10); sctx.lineTo(30, 130); sctx.lineTo(290, 130); sctx.stroke();
+  sctx.strokeStyle = '#58a6ff'; sctx.lineWidth = 2; sctx.beginPath();
+  ABAR.forEach((a, t) => {
+    const x = 30 + t / (T - 1) * 260, y = 130 - a * 115;
+    t === 0 ? sctx.moveTo(x, y) : sctx.lineTo(x, y);
+  });
+  sctx.stroke();
+  const cx = 30 + state.t / (T - 1) * 260, cy = 130 - ABAR[state.t] * 115;
+  sctx.fillStyle = '#f778ba'; sctx.beginPath(); sctx.arc(cx, cy, 4, 0, Math.PI * 2); sctx.fill();
+  sctx.fillStyle = '#8b949e'; sctx.font = '10px Consolas';
+  sctx.fillText('ᾱ=1', 4, 15); sctx.fillText('ᾱ=0', 8, 130); sctx.fillText('t=0', 26, 144); sctx.fillText('t=T', 268, 144);
+}
+
+// ==================== 动画循环 =========================
+let raf = null, acc = 0;
+function loop() {
+  if (state.mode === 'fwd' && state.t < T - 1) { state.t++; forwardTo(state.t); draw(); }
+  else if (state.mode === 'rev' && state.t > 0) { reverseStep(); draw(); }
+  else state.mode = 'idle';
+  const sp = parseInt(document.getElementById('speed').value);
+  setTimeout(() => requestAnimationFrame(loop), 260 / sp);
+}
+requestAnimationFrame(loop);
+
+function setPhase(m) {
+  state.mode = m;
+  document.getElementById('phaseTag').textContent = m === 'fwd' ? '前向加噪' : m === 'rev' ? '反向去噪' : '待命';
+  document.getElementById('phaseTag').className = 'phase ' + (m === 'fwd' ? 'fwd' : 'rev');
+}
+
+document.getElementById('btnFwd').onclick  = () => { if (state.t >= T - 1) { state.t = 0; forwardTo(0); } setPhase('fwd'); };
+document.getElementById('btnRev').onclick  = () => { if (state.t === 0) { state.t = T - 1; forwardTo(T - 1); } setPhase('rev'); };
+document.getElementById('btnReset').onclick= () => { setPhase('idle'); state.t = 0; forwardTo(0); draw(); };
+document.getElementById('tSlider').oninput = e => { setPhase('idle'); state.t = +e.target.value; forwardTo(state.t); draw(); };
+document.getElementById('speed').oninput   = e => document.getElementById('speedVal').textContent = e.target.value;
+document.getElementById('target').onchange = () => { sampleData(); setPhase('idle'); state.t = 0; forwardTo(0); draw(); };
+
+sampleData(); forwardTo(0); draw();
+</script>
+</body>
+</html>

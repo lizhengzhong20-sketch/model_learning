@@ -162,7 +162,7 @@ graph LR
 |----|------|------|------|------|
 | 5 | 👁️ [计算机视觉](docs/4-专业方向/05-计算机视觉/README.md) | 看见 | CNN、检测 / 分割、ViT | ⭐⭐⭐ |
 | 6 | 📈 [时间序列](docs/4-专业方向/06-时间序列/README.md) | 预知 | ARIMA、RNN / LSTM、现代时序模型 | ⭐⭐⭐ |
-| 7 | 💬 [NLP 与大语言模型](docs/4-专业方向/07-自然语言处理与LLM/README.md) | 读写 | 词向量、Transformer、架构细节与变体、LLM、对齐、RAG / Agent | ⭐⭐⭐⭐ |
+| 7 | 💬 [NLP 与大语言模型](docs/4-专业方向/07-自然语言处理与LLM/README.md) | 读写 | 词向量、Transformer、架构细节与变体、LLM、对齐、RAG / Agent、进阶专题（训练与推理全栈） | ⭐⭐⭐⭐ |
 | 8 | 🛍️ [推荐系统](docs/4-专业方向/08-推荐系统/README.md) | 匹配 | 协同过滤、矩阵分解、**双塔模型与向量召回**、排序模型 | ⭐⭐⭐ |
 | 9 | 🕸️ [图神经网络](docs/4-专业方向/09-图神经网络/README.md) | 关系 | 消息传递、GCN / GAT | ⭐⭐⭐ |
 | 10 | 🎮 [强化学习](docs/4-专业方向/10-强化学习/README.md) | 决策 | MDP、Q-Learning、DQN / PPO | ⭐⭐⭐ |
@@ -174,7 +174,7 @@ graph LR
 |----|------|------|------|------|
 | 12 | 🎨 [生成模型与多模态](docs/5-前沿与融合/12-生成模型与多模态/README.md) | 创造 | 生成全景、**GAN**、**Diffusion**、多模态、前沿地图 | ⭐⭐⭐⭐ |
 
-**配套文件**：[🌳 知识树总导航](./docs/知识树.md) · [🗺️ 知识地图与阅读路线](./ROADMAP.md) · [🤝 贡献指南](./CONTRIBUTING.md) · [📝 更新日志](./CHANGELOG.md) · [📐 写作模板](templates/模型讲解模板.md)
+**配套文件**：[🌳 知识树总导航](./docs/知识树.md) · [🗺️ 知识地图与阅读路线](./ROADMAP.md) · [🤝 贡献指南](./CONTRIBUTING.md) · [📝 更新日志](./CHANGELOG.md) · [📐 写作模板](templates/模型讲解模板.md) · [📓 实战 Notebook](notebooks/README.md) · [📜 论文精读专栏](papers/README.md)
 
 ## 🚀 快速开始
 
@@ -222,6 +222,8 @@ git clone https://github.com/lizhengzhong20-sketch/model_learning.git
 |------|------|--------|
 | 🔥 梯度下降炼丹炉 | `playground/gradient-descent.html` | 拖学习率与动量，看小球如何下山、跨坑、以及步子太大时飞出山谷；对比 SGD / Momentum / Adam |
 | 👀 注意力热力图 | `playground/attention.html` | 输入任意一句话，看注意力权重矩阵怎么算、长什么样 |
+| 🔬 卷积核滑动可视化 | `playground/conv.html` | 看 3×3 核逐格滑过图像：窗口像素、可编辑核、特征图实时生成；支持上传图片 |
+| 🌀 扩散去噪实验室 | `playground/diffusion.html` | 前向加噪打碎分布、反向一步步雕刻回原形；拖时间步看每一步与噪声调度 |
 | 🌀 动态知识树 | `playground/knowledge-tree.html` | 拖拽节点、聚焦依赖链、搜索定位（导航页 `playground/index.html`） |
 
 正文中的 🖱️「动手玩」小节链接的也是这些实验，同样需在本地打开。
@@ -233,6 +235,7 @@ git clone https://github.com/lizhengzhong20-sketch/model_learning.git
 - [x] 五篇十三章框架 + 50+ 页正文（见上方目录）
 - [x] 全局知识树、阅读路线、每章生产实战收官页
 - [x] v0.2 全库深度化：每页机制四层递进（直觉→数学→成立条件→失效边界）+ 完整推导折叠 + 失败模式分析（13k → 21k+ 行）
+- [x] v0.3 极高深度：**11 个进阶专题页**（大规模训练/LLM 全栈/推荐工程/生成前沿…）+ 每页 🎓深度视角/🔬SOTA 演进/❓开放问题 三补丁 + **62 个📐数学深潜模块**（对标《理解深度学习》推导风格，覆盖每一页）（21k → 33k+ 行）
 - [x] 统一写作模板、扩展机制与贡献流程
 
 **Backlog**（欢迎认领，详见 [CHANGELOG](./CHANGELOG.md)）
